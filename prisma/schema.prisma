@@ -28,16 +28,6 @@ enum UserRole {
   SUPERADMIN
 }
 
-
-model Category {
-  id       String    @id @default(uuid())
-  name     String    @unique
-  slug     String    @unique
-}
-
-
-
-
 enum Status {
   Aktif
   Tidak_Aktif @map("Tidak Aktif")

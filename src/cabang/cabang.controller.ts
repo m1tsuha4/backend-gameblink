@@ -44,16 +44,16 @@ export class CabangController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.cabangService.findOne(+id);
+    return this.cabangService.findOne(id);
   }
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateCabangDto: UpdateCabangDto) {
-    return this.cabangService.update(+id, updateCabangDto);
+    return this.cabangService.update(id, updateCabangDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.cabangService.remove(+id);
+    return this.cabangService.remove(id);
   }
 }

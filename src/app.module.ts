@@ -8,7 +8,6 @@ import { AuthModule } from './auth/auth.module';
 import { WinstonLoggerService } from './common/services/winston-logger.service';
 import { LoggingMiddleware } from './common/middlewares/logging.middleware';
 import { ServeStaticModule } from '@nestjs/serve-static';
-import { CategoriesModule } from './categories/categories.module';
 import { join } from 'path';
 import { CabangModule } from './cabang/cabang.module';
 
@@ -25,7 +24,6 @@ import { CabangModule } from './cabang/cabang.module';
     }),
     UserModule,
     AuthModule,
-    CategoriesModule,
     CabangModule,
   ],
   controllers: [AppController],

@@ -22,7 +22,7 @@ export class UserService {
         email: dto.email,
         name: dto.name,
         password,
-        role: dto.role || UserRole.USER,
+        role: dto.role || UserRole.ADMIN,
       },
     });
   }
