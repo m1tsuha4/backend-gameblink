@@ -10,6 +10,7 @@ import { LoggingMiddleware } from './common/middlewares/logging.middleware';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { CabangModule } from './cabang/cabang.module';
+import { UnitModule } from './unit/unit.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CabangModule } from './cabang/cabang.module';
     UserModule,
     AuthModule,
     CabangModule,
+    UnitModule,
   ],
   controllers: [AppController],
   providers: [AppService, WinstonLoggerService],
