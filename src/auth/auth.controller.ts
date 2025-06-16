@@ -6,7 +6,10 @@ import {
   Patch,
   Post,
   UseGuards,
+  Req,
+  BadRequestException
 } from '@nestjs/common';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { LoginDto, LoginSchema } from './dto/login.dto';
@@ -46,5 +49,17 @@ export class AuthController {
     @Body(new ZodValidationPipe(UpdateUserSchema)) dto: UpdateUserDto,
   ) {
     return this.userService.updateUser(user.id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('logout')
+  async logout(@User() user, @Req() request: Request) {
+    // Extract token from Authorization header
+    const authHeader = request.headers.authorization;
+    const token = authHeader?.replace('Bearer ', '');
+    if (!token) {
+      throw new BadRequestException('Token not found in request headers');
+    }
+    return this.authService.logout(user.id, token);
   }
 }

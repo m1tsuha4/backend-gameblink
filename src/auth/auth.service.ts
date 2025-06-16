@@ -3,12 +3,14 @@ import * as bcrypt from 'bcryptjs';
 import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private userService: UserService,
     private jwtService: JwtService,
+    private prismaService: PrismaService
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -39,6 +41,21 @@ export class AuthService {
         name: user.name,
         role: user.role,
       }
+    };
+  }
+  async logout(id: string, token: string) {
+    // Add token to blacklist table in database
+    await this.prismaService.tokenBlacklist.create({
+      data: {
+        token: token,
+        userId: id,
+        createdAt: new Date()
+      }
+    });
+
+    return {
+      message: 'Logout successful',
+      success: true
     };
   }
 }
