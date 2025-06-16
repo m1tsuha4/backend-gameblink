@@ -39,10 +39,13 @@ model Cabang {
   alamat_cabang String
   imageCabang String?
   status Status @default(Tidak_Aktif)
+  Unit Unit[]
 }
 
 model Unit {
   id  String @id @default(uuid())
+  cabang Cabang? @relation(fields: [cabang_id], references: [id])
+  cabang_id String?
   nama_unit String
   jenis_konsol String
   harga Int

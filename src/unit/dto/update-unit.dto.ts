@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateUnitDto } from './create-unit.dto';
+import { createZodDto } from '@anatine/zod-nestjs';
+import { CreateUnitSchema } from './create-unit.dto';
 
-export class UpdateUnitDto extends PartialType(CreateUnitDto) {}
+export const UpdateUnitSchema = CreateUnitSchema.partial();
+
+export class UpdateUnitDto extends createZodDto(UpdateUnitSchema) {}

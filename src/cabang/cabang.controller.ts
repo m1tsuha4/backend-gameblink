@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { CabangService } from './cabang.service';
 import { CreateCabangDto, CreateCabangSchema } from './dto/create-cabang.dto';
-import { UpdateCabangDto } from './dto/update-cabang.dto';
+import { UpdateCabangDto, UpdateCabangSchema } from './dto/update-cabang.dto';
 import { ZodValidationPipe } from 'src/common/pipes/zod-validation.pipe';
 import { ApiBody, ApiConsumes, ApiProperty } from '@nestjs/swagger';
 import { UploadImageInterceptor } from 'src/common/interceptors/multer-config.interceptors';
@@ -47,8 +47,9 @@ export class CabangController {
     return this.cabangService.findOne(id);
   }
 
+  @UploadImageInterceptor('cabang')
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateCabangDto: UpdateCabangDto) {
+  update(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateCabangSchema)) updateCabangDto: UpdateCabangDto ) {
     return this.cabangService.update(id, updateCabangDto);
   }
 

@@ -28,12 +28,27 @@ export class CabangService {
   }
 
   async findAll() {
-    const cabang = await this.prismaService.cabang.findMany({});
+     const cabang = await this.prismaService.cabang.findMany({
+      include: {
+        _count: {
+          select: {
+            Unit: true
+          }
+        }
+      }
+    });
 
     if (cabang.length === 0) 
       throw new NotFoundException('Cabang not found');
 
-    return cabang;
+    // Transform the response to include unit count in a more readable format
+    const cabangWithUnitCount = cabang.map(branch => ({
+      ...branch,
+      count_unit: branch._count.Unit,
+      _count: undefined // Remove the _count object from response
+    }));
+
+    return cabangWithUnitCount;
   }
 
   async findOne(id: string) {
