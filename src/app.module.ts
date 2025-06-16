@@ -11,6 +11,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { CabangModule } from './cabang/cabang.module';
 import { UnitModule } from './unit/unit.module';
+import { KetersediaanModule } from './ketersediaan/ketersediaan.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { UnitModule } from './unit/unit.module';
     AuthModule,
     CabangModule,
     UnitModule,
+    KetersediaanModule,
   ],
   controllers: [AppController],
   providers: [AppService, WinstonLoggerService],

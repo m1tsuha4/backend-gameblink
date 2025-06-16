@@ -49,6 +49,7 @@ model Cabang {
   imageCabang String?
   status Status @default(Tidak_Aktif)
   Unit Unit[]
+  Ketersediaan Ketersediaan[]
 }
 
 model Unit {
@@ -58,4 +59,18 @@ model Unit {
   nama_unit String
   jenis_konsol String
   harga Int
+  Ketersediaan Ketersediaan[]
+}
+
+model Ketersediaan {
+  id_ketersediaan Int @id @default(autoincrement())
+  cabang Cabang? @relation(fields: [cabang_id], references: [id])
+  cabang_id String?
+  unit Unit? @relation(fields: [unit_id], references: [id])
+  unit_id String?
+  tanggal_mulai_blokir DateTime
+  jam_mulai_blokir String
+  tanggal_selesai_blokir DateTime
+  jam_selesai_blokir String
+  keterangan String
 }
