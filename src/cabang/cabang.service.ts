@@ -44,7 +44,7 @@ export class CabangService {
     // Transform the response to include unit count in a more readable format
     const cabangWithUnitCount = cabang.map(branch => ({
       ...branch,
-      count_unit: branch._count.Unit,
+      jumlah_unit: branch._count.Unit,
       _count: undefined // Remove the _count object from response
     }));
 
