@@ -14,13 +14,13 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
+  id        String           @id @default(uuid())
+  email     String           @unique
   password  String
   name      String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  role      UserRole  @default(ADMIN)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  role      UserRole         @default(ADMIN)
   blackList TokenBlacklist[]
 }
 
@@ -31,10 +31,12 @@ enum UserRole {
 
 model TokenBlacklist {
   id        String   @id @default(uuid())
-  token     String   @unique
+  token     String   @db.Text
   userId    String
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([token(length: 255)])
 }
 
 enum Status {
@@ -43,34 +45,34 @@ enum Status {
 }
 
 model Cabang {
-  id  String @id @default(uuid())
-  nama_cabang String @unique
+  id            String         @id @default(uuid())
+  nama_cabang   String         @unique
   alamat_cabang String
-  imageCabang String?
-  status Status @default(Tidak_Aktif)
-  Unit Unit[]
-  Ketersediaan Ketersediaan[]
+  imageCabang   String?
+  status        Status         @default(Tidak_Aktif)
+  Unit          Unit[]
+  Ketersediaan  Ketersediaan[]
 }
 
 model Unit {
-  id  String @id @default(uuid())
-  cabang Cabang? @relation(fields: [cabang_id], references: [id])
-  cabang_id String?
-  nama_unit String
+  id           String         @id @default(uuid())
+  cabang       Cabang?        @relation(fields: [cabang_id], references: [id])
+  cabang_id    String?
+  nama_unit    String
   jenis_konsol String
-  harga Int
+  harga        Int
   Ketersediaan Ketersediaan[]
 }
 
 model Ketersediaan {
-  id_ketersediaan Int @id @default(autoincrement())
-  cabang Cabang? @relation(fields: [cabang_id], references: [id])
-  cabang_id String?
-  unit Unit? @relation(fields: [unit_id], references: [id])
-  unit_id String?
-  tanggal_mulai_blokir DateTime
-  jam_mulai_blokir String
+  id_ketersediaan        Int      @id @default(autoincrement())
+  cabang                 Cabang?  @relation(fields: [cabang_id], references: [id])
+  cabang_id              String?
+  unit                   Unit?    @relation(fields: [unit_id], references: [id])
+  unit_id                String?
+  tanggal_mulai_blokir   DateTime
+  jam_mulai_blokir       String
   tanggal_selesai_blokir DateTime
-  jam_selesai_blokir String
-  keterangan String
+  jam_selesai_blokir     String
+  keterangan             String
 }
