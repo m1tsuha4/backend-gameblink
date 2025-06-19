@@ -21,6 +21,7 @@ async function bootstrap() {
 
   // Apply the global response interceptor
   app.useGlobalInterceptors(new TransformInterceptor());
+  app.useGlobalFilters(new HttpExceptionFilter());
 
   // Also recommended: a global validation pipe
   await app.listen(process.env.PORT ?? 3000);
