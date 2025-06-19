@@ -52,11 +52,13 @@ export class CabangService {
   }
 
   async findOne(id: string) {
-    return this.prismaService.cabang.findUnique({
+    const cabang = await this.prismaService.cabang.findUnique({
       where: {
         id: id,
       }
     });
+    if (!cabang) throw new NotFoundException('Cabang not found');
+    return cabang;
   }
 
   async update(id: string, dto: UpdateCabangDto) {

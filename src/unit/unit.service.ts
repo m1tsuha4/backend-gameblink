@@ -36,7 +36,13 @@ export class UnitService {
   }
 
   async findOne(id: string) {
-    return this.prismaService.unit.findUnique({ where: { id: id } });
+    const unit = await this.prismaService.unit.findUnique({ where: { id: id } });
+
+    if (!unit) {
+      throw new NotFoundException('Unit not found');
+    }
+
+    return unit;
   }
 
   async update(id: string, updateUnitDto: UpdateUnitDto) {

@@ -1,3 +1,4 @@
+import { Ketersediaan } from './entities/ketersediaan.entity';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateKetersediaanDto } from './dto/create-ketersediaan.dto';
 import { UpdateKetersediaanDto } from './dto/update-ketersediaan.dto';
@@ -35,7 +36,13 @@ export class KetersediaanService {
   }
 
   async findOne(id: number) {
-    return this.prismaService.ketersediaan.findUnique({ where: { id_ketersediaan: id } });
+    const Ketersediaan = await this.prismaService.ketersediaan.findUnique({ where: { id_ketersediaan: id } });
+
+    if (!Ketersediaan) {
+      throw new NotFoundException('Ketersediaan not found');
+    }
+
+    return Ketersediaan;
   }
 
   async update(id: number, updateKetersediaanDto: UpdateKetersediaanDto) {
