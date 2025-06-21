@@ -8,7 +8,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 export class KetersediaanService {
   constructor(private prismaService: PrismaService) {}
   async create(createKetersediaanDto: CreateKetersediaanDto) {
-    return this.prismaService.ketersediaan.create({
+    return await this.prismaService.ketersediaan.create({
       data: createKetersediaanDto
     });
   }
@@ -35,7 +35,7 @@ export class KetersediaanService {
     return formatedKetersediaan;
   }
 
-  async findOne(id: number) {
+  async findOne(id: string) {
     const Ketersediaan = await this.prismaService.ketersediaan.findUnique({ where: { id_ketersediaan: id } });
 
     if (!Ketersediaan) {
@@ -45,7 +45,7 @@ export class KetersediaanService {
     return Ketersediaan;
   }
 
-  async update(id: number, updateKetersediaanDto: UpdateKetersediaanDto) {
+  async update(id: string, updateKetersediaanDto: UpdateKetersediaanDto) {
     const existingKetersediaan = await this.prismaService.ketersediaan.findUnique({
       where: {
         id_ketersediaan: id,
@@ -72,7 +72,7 @@ export class KetersediaanService {
   }
 
 
-  async remove(id: number) {
+  async remove(id: string) {
     const existingKetersediaan = await this.prismaService.ketersediaan.findUnique({
       where: {
         id_ketersediaan: id,

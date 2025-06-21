@@ -19,17 +19,17 @@ export class KetersediaanController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: number) {
+  findOne(@Param('id') id: string) {
     return this.ketersediaanService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: number, @Body(new ZodValidationPipe(UpdateKetersediaanSchema)) updateKetersediaanDto: UpdateKetersediaanDto) {
+  update(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateKetersediaanSchema)) updateKetersediaanDto: UpdateKetersediaanDto) {
     return this.ketersediaanService.update(id, updateKetersediaanDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: number) {
+  remove(@Param('id') id: string) {
     return this.ketersediaanService.remove(id);
   }
 }

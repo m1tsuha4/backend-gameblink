@@ -65,7 +65,7 @@ model Unit {
 }
 
 model Ketersediaan {
-  id_ketersediaan        Int      @id @default(autoincrement())
+  id_ketersediaan        String   @id @default(uuid())
   cabang                 Cabang?  @relation(fields: [cabang_id], references: [id])
   cabang_id              String?
   unit                   Unit?    @relation(fields: [unit_id], references: [id])
