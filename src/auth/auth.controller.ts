@@ -7,7 +7,7 @@ import {
   Post,
   UseGuards,
   Req,
-  BadRequestException
+  BadRequestException,
 } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthService } from './auth.service';

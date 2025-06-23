@@ -29,9 +29,10 @@ export class CabangController {
   @UploadImageInterceptor('cabang')
   async create(
     @UploadedFile() imageCabang: Express.Multer.File,
-    @Body(new ZodValidationPipe(CreateCabangSchema)) createCabangDto: CreateCabangDto,
+    @Body(new ZodValidationPipe(CreateCabangSchema))
+    createCabangDto: CreateCabangDto,
   ) {
-    console.log(imageCabang)
+    console.log(imageCabang);
     if (imageCabang) {
       createCabangDto.imageCabang = imageCabang.filename;
     }
@@ -47,9 +48,18 @@ export class CabangController {
     return this.cabangService.findOne(id);
   }
 
-  @UploadImageInterceptor('cabang')
   @Patch(':id')
-  update(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateCabangSchema)) updateCabangDto: UpdateCabangDto ) {
+  @ApiConsumes('multipart/form-data')
+  @UploadImageInterceptor('cabang')
+  update(
+    @UploadedFile() imageCabang: Express.Multer.File,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateCabangSchema))
+    updateCabangDto: UpdateCabangDto,
+  ) {
+    if (imageCabang) {
+      updateCabangDto.imageCabang = imageCabang.filename;
+    }
     return this.cabangService.update(id, updateCabangDto);
   }
 

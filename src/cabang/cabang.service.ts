@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateCabangDto } from './dto/create-cabang.dto';
 import { UpdateCabangDto } from './dto/update-cabang.dto';
 import { Prisma } from '@prisma/client';
@@ -22,30 +26,29 @@ export class CabangService {
         nama_cabang: dto.nama_cabang,
         alamat_cabang: dto.alamat_cabang,
         imageCabang: `/uploads/cabang/${dto.imageCabang}`,
-        status: dto.status
+        status: dto.status,
       },
     });
   }
 
   async findAll() {
-     const cabang = await this.prismaService.cabang.findMany({
+    const cabang = await this.prismaService.cabang.findMany({
       include: {
         _count: {
           select: {
-            Unit: true
-          }
-        }
-      }
+            Unit: true,
+          },
+        },
+      },
     });
 
-    if (cabang.length === 0) 
-      throw new NotFoundException('Cabang not found');
+    if (cabang.length === 0) throw new NotFoundException('Cabang not found');
 
     // Transform the response to include unit count in a more readable format
-    const cabangWithUnitCount = cabang.map(branch => ({
+    const cabangWithUnitCount = cabang.map((branch) => ({
       ...branch,
       jumlah_unit: branch._count.Unit,
-      _count: undefined // Remove the _count object from response
+      _count: undefined, // Remove the _count object from response
     }));
 
     return cabangWithUnitCount;
@@ -55,7 +58,7 @@ export class CabangService {
     const cabang = await this.prismaService.cabang.findUnique({
       where: {
         id: id,
-      }
+      },
     });
     if (!cabang) throw new NotFoundException('Cabang not found');
     return cabang;
@@ -65,7 +68,7 @@ export class CabangService {
     const existingCabang = await this.prismaService.cabang.findUnique({
       where: {
         id: id,
-      }
+      },
     });
     if (!existingCabang) throw new NotFoundException('Cabang not found');
 
@@ -75,8 +78,8 @@ export class CabangService {
         nama_cabang: dto.nama_cabang,
         alamat_cabang: dto.alamat_cabang,
         imageCabang: `/uploads/cabang/${dto.imageCabang}`,
-        status: dto.status
-      }
+        status: dto.status,
+      },
     });
   }
 

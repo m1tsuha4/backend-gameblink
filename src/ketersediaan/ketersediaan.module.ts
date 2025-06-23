@@ -6,6 +6,6 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 @Module({
   controllers: [KetersediaanController],
   providers: [KetersediaanService],
-  imports: [PrismaModule]
+  imports: [PrismaModule],
 })
 export class KetersediaanModule {}

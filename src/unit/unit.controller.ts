@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { UnitService } from './unit.service';
 import { CreateUnitDto, CreateUnitSchema } from './dto/create-unit.dto';
 import { UpdateUnitDto, UpdateUnitSchema } from './dto/update-unit.dto';
@@ -9,7 +17,9 @@ export class UnitController {
   constructor(private readonly unitService: UnitService) {}
 
   @Post()
-  create(@Body(new ZodValidationPipe(CreateUnitSchema)) createUnitDto: CreateUnitDto) {
+  create(
+    @Body(new ZodValidationPipe(CreateUnitSchema)) createUnitDto: CreateUnitDto,
+  ) {
     return this.unitService.create(createUnitDto);
   }
 
@@ -29,7 +39,10 @@ export class UnitController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateUnitSchema)) updateUnitDto: UpdateUnitDto) {
+  update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateUnitSchema)) updateUnitDto: UpdateUnitDto,
+  ) {
     return this.unitService.update(id, updateUnitDto);
   }
 

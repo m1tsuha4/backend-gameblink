@@ -52,6 +52,7 @@ model Cabang {
   status        Status         @default(Tidak_Aktif)
   Unit          Unit[]
   Ketersediaan  Ketersediaan[]
+  Booking       Booking[]
 }
 
 model Unit {
@@ -62,6 +63,7 @@ model Unit {
   jenis_konsol String
   harga        Int
   Ketersediaan Ketersediaan[]
+  Booking      Booking[]
 }
 
 model Ketersediaan {
@@ -75,4 +77,34 @@ model Ketersediaan {
   tanggal_selesai_blokir DateTime
   jam_selesai_blokir     String
   keterangan             String
+}
+
+model Booking {
+  id                    String @id @default(uuid())
+  nama                  String
+  nomor_hp              String
+  email                 String
+  cabang                Cabang?  @relation(fields: [cabang_id], references: [id])
+  cabang_id             String?
+  unit                  Unit?    @relation(fields: [unit_id], references: [id])
+  unit_id               String?
+  tanggal_main          DateTime
+  jam_main              String
+  tanggal_transaksi     DateTime
+  metode_pembayaran     String
+  total_harga           Int
+  status_pembayaran     StatusPembayaran
+  status_booking        StatusBooking
+}
+
+enum StatusPembayaran {
+  Berhasil
+  Gagal
+  Pending
+}
+
+enum StatusBooking {
+  Aktif
+  Selesai
+  Dibatalkan
 }

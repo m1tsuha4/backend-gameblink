@@ -10,7 +10,7 @@ export class AuthService {
   constructor(
     private userService: UserService,
     private jwtService: JwtService,
-    private prismaService: PrismaService
+    private prismaService: PrismaService,
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -40,7 +40,7 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
-      }
+      },
     };
   }
   async logout(id: string, token: string) {
@@ -49,13 +49,13 @@ export class AuthService {
       data: {
         token: token,
         userId: id,
-        createdAt: new Date()
-      }
+        createdAt: new Date(),
+      },
     });
 
     return {
       message: 'Logout successful',
-      success: true
+      success: true,
     };
   }
 }

@@ -1,7 +1,21 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { KetersediaanService } from './ketersediaan.service';
-import { CreateKetersediaanDto, CreateKetersediaanSchema } from './dto/create-ketersediaan.dto';
-import { UpdateKetersediaanDto, UpdateKetersediaanSchema } from './dto/update-ketersediaan.dto';
+import {
+  CreateKetersediaanDto,
+  CreateKetersediaanSchema,
+} from './dto/create-ketersediaan.dto';
+import {
+  UpdateKetersediaanDto,
+  UpdateKetersediaanSchema,
+} from './dto/update-ketersediaan.dto';
 import { ZodValidationPipe } from 'src/common/pipes/zod-validation.pipe';
 
 @Controller('ketersediaan')
@@ -9,7 +23,10 @@ export class KetersediaanController {
   constructor(private readonly ketersediaanService: KetersediaanService) {}
 
   @Post()
-  create(@Body(new ZodValidationPipe(CreateKetersediaanSchema)) createKetersediaanDto: CreateKetersediaanDto) {
+  create(
+    @Body(new ZodValidationPipe(CreateKetersediaanSchema))
+    createKetersediaanDto: CreateKetersediaanDto,
+  ) {
     return this.ketersediaanService.create(createKetersediaanDto);
   }
 
@@ -24,7 +41,11 @@ export class KetersediaanController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body(new ZodValidationPipe(UpdateKetersediaanSchema)) updateKetersediaanDto: UpdateKetersediaanDto) {
+  update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateKetersediaanSchema))
+    updateKetersediaanDto: UpdateKetersediaanDto,
+  ) {
     return this.ketersediaanService.update(id, updateKetersediaanDto);
   }
 

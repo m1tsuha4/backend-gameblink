@@ -12,6 +12,7 @@ import { join } from 'path';
 import { CabangModule } from './cabang/cabang.module';
 import { UnitModule } from './unit/unit.module';
 import { KetersediaanModule } from './ketersediaan/ketersediaan.module';
+import { BookingModule } from './booking/booking.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { KetersediaanModule } from './ketersediaan/ketersediaan.module';
     CabangModule,
     UnitModule,
     KetersediaanModule,
+    BookingModule,
   ],
   controllers: [AppController],
   providers: [AppService, WinstonLoggerService],

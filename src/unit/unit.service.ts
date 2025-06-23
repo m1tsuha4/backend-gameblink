@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -13,10 +17,10 @@ export class UnitService {
   }
 
   async findAllByCabang(cabang_id: string) {
-  const units = await this.prismaService.unit.findMany({
+    const units = await this.prismaService.unit.findMany({
       where: {
-        cabang_id: cabang_id 
-      }
+        cabang_id: cabang_id,
+      },
     });
 
     if (units.length === 0) {
@@ -29,14 +33,15 @@ export class UnitService {
   async findAll() {
     const unit = await this.prismaService.unit.findMany({});
 
-    if (unit.length === 0) 
-      throw new NotFoundException('Unit not found');
+    if (unit.length === 0) throw new NotFoundException('Unit not found');
 
     return unit;
   }
 
   async findOne(id: string) {
-    const unit = await this.prismaService.unit.findUnique({ where: { id: id } });
+    const unit = await this.prismaService.unit.findUnique({
+      where: { id: id },
+    });
 
     if (!unit) {
       throw new NotFoundException('Unit not found');

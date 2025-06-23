@@ -9,7 +9,7 @@ export class KetersediaanService {
   constructor(private prismaService: PrismaService) {}
   async create(createKetersediaanDto: CreateKetersediaanDto) {
     return await this.prismaService.ketersediaan.create({
-      data: createKetersediaanDto
+      data: createKetersediaanDto,
     });
   }
 
@@ -17,26 +17,28 @@ export class KetersediaanService {
     const ketersediaan = await this.prismaService.ketersediaan.findMany({
       include: {
         cabang: true,
-        unit: true
-      }
+        unit: true,
+      },
     });
 
-    if (ketersediaan.length === 0) 
+    if (ketersediaan.length === 0)
       throw new NotFoundException('Ketersediaan not found');
-    
-    const formatedKetersediaan = ketersediaan.map(ketersediaan => ({
+
+    const formatedKetersediaan = ketersediaan.map((ketersediaan) => ({
       ...ketersediaan,
       nama_cabang: ketersediaan.cabang?.nama_cabang,
       nama_unit: ketersediaan.unit?.nama_unit,
       cabang: undefined,
-      unit: undefined
+      unit: undefined,
     }));
 
     return formatedKetersediaan;
   }
 
   async findOne(id: string) {
-    const Ketersediaan = await this.prismaService.ketersediaan.findUnique({ where: { id_ketersediaan: id } });
+    const Ketersediaan = await this.prismaService.ketersediaan.findUnique({
+      where: { id_ketersediaan: id },
+    });
 
     if (!Ketersediaan) {
       throw new NotFoundException('Ketersediaan not found');
@@ -46,40 +48,44 @@ export class KetersediaanService {
   }
 
   async update(id: string, updateKetersediaanDto: UpdateKetersediaanDto) {
-    const existingKetersediaan = await this.prismaService.ketersediaan.findUnique({
-      where: {
-        id_ketersediaan: id,
-      },
-    });
-    
+    const existingKetersediaan =
+      await this.prismaService.ketersediaan.findUnique({
+        where: {
+          id_ketersediaan: id,
+        },
+      });
+
     if (!existingKetersediaan) {
       throw new NotFoundException('Ketersediaan not found');
     }
-    
+
     // Filter out undefined values to avoid Prisma issues
     const updateData = Object.fromEntries(
-      Object.entries(updateKetersediaanDto).filter(([_, value]) => value !== undefined)
+      Object.entries(updateKetersediaanDto).filter(
+        ([_, value]) => value !== undefined,
+      ),
     );
-    
+
     return this.prismaService.ketersediaan.update({
       where: { id_ketersediaan: id },
       data: updateData,
       include: {
         cabang: true,
-        unit: true
-      }
+        unit: true,
+      },
     });
   }
 
-
   async remove(id: string) {
-    const existingKetersediaan = await this.prismaService.ketersediaan.findUnique({
-      where: {
-        id_ketersediaan: id,
-      },
-    });
-    if(!existingKetersediaan) throw new NotFoundException('Ketersediaan not found');
-    
+    const existingKetersediaan =
+      await this.prismaService.ketersediaan.findUnique({
+        where: {
+          id_ketersediaan: id,
+        },
+      });
+    if (!existingKetersediaan)
+      throw new NotFoundException('Ketersediaan not found');
+
     return this.prismaService.ketersediaan.delete({
       where: { id_ketersediaan: id },
     });
