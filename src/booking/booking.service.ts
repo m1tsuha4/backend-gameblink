@@ -12,8 +12,14 @@ export class BookingService {
     });
   }
 
-  async findAll() {
+  async findAll(tanggal_main?: string) {
+     const where: any = {};
+
+    if (tanggal_main) {
+      where.tanggal_main = this.buildDateRange(tanggal_main);
+    }
     const booking = await this.prismaService.booking.findMany({
+      where,
       include: {
         cabang: true,
         unit: true,
@@ -92,5 +98,12 @@ export class BookingService {
     return this.prismaService.booking.delete({
       where: { id },
     });
+  }
+
+  private buildDateRange(dateStr: string) {
+    const start = new Date(`${dateStr}T00:00:00.000Z`);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+    return { gte: start, lt: end };
   }
 }

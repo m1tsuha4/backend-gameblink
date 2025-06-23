@@ -7,6 +7,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import {
@@ -31,8 +32,10 @@ export class BookingController {
   }
 
   @Get()
-  findAll() {
-    return this.bookingService.findAll();
+  findAll(
+     @Query('tanggal_main') tanggal_main: string
+  ) {
+    return this.bookingService.findAll(tanggal_main);
   }
 
   @Get(':id')
