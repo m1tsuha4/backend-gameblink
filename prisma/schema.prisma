@@ -34,7 +34,7 @@ model TokenBlacklist {
   token     String   @db.Text
   userId    String
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([token(length: 255)])
 }
@@ -56,21 +56,21 @@ model Cabang {
 }
 
 model Unit {
-  id           String         @id @default(uuid())
-  cabang       Cabang?        @relation(fields: [cabang_id], references: [id])
-  cabang_id    String?
-  nama_unit    String
-  jenis_konsol String
-  harga        Int
-  Ketersediaan Ketersediaan[]
-  Booking      Booking[]
+  id                String         @id @default(uuid())
+  cabang            Cabang?        @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
+  cabang_id         String?
+  nama_unit         String
+  jenis_konsol      String
+  harga             Int
+  Ketersediaan      Ketersediaan[]
+  booking_details   BookingDetail[]
 }
 
 model Ketersediaan {
   id_ketersediaan        String   @id @default(uuid())
-  cabang                 Cabang?  @relation(fields: [cabang_id], references: [id])
+  cabang                 Cabang?  @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
   cabang_id              String?
-  unit                   Unit?    @relation(fields: [unit_id], references: [id])
+  unit                   Unit?    @relation(fields: [unit_id], references: [id], onDelete: Cascade)
   unit_id                String?
   tanggal_mulai_blokir   DateTime
   jam_mulai_blokir       String
@@ -81,20 +81,30 @@ model Ketersediaan {
 
 model Booking {
   id                    String @id @default(uuid())
+  booking_code          String @unique
   nama                  String
   nomor_hp              String
   email                 String
-  cabang                Cabang?  @relation(fields: [cabang_id], references: [id])
+  cabang                Cabang?  @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
   cabang_id             String?
-  unit                  Unit?    @relation(fields: [unit_id], references: [id])
-  unit_id               String?
   tanggal_main          DateTime
-  jam_main              String
   tanggal_transaksi     DateTime
   metode_pembayaran     String
   total_harga           Int
   status_pembayaran     StatusPembayaran
   status_booking        StatusBooking
+  booking_details       BookingDetail[]
+}
+
+model BookingDetail {
+  id          String  @id @default(uuid())
+  booking_id  String
+  unit_id     String
+  jam_main    String
+  harga       Int
+  
+  booking     Booking @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+  unit        Unit    @relation(fields: [unit_id], references: [id], onDelete: Cascade)
 }
 
 enum StatusPembayaran {
