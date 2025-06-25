@@ -7,7 +7,9 @@ import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors();
+  app.enableCors({
+    origin: 'https://gameblink-eta.vercel.app',
+  });
 
   const config = new DocumentBuilder()
     .setTitle('Berita')

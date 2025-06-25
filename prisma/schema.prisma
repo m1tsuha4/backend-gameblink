@@ -77,6 +77,11 @@ model Ketersediaan {
   tanggal_selesai_blokir DateTime
   jam_selesai_blokir     String
   keterangan             String
+  status_perbaikan       StatusPerbaikan  @default(Pending)      
+}
+enum StatusPerbaikan {
+  Selesai
+  Pending
 }
 
 model Booking {
