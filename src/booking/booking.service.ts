@@ -2,10 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { MidtransService } from 'src/midtrans/midtrans.service';
 
 @Injectable()
 export class BookingService {
-  constructor(private prismaService: PrismaService) {}
+  constructor(
+    private prismaService: PrismaService,
+    private midtransService: MidtransService
+  ) {}
   private async generateBookingCode(): Promise<string> {
     const lastBooking = await this.prismaService.booking.findFirst({
       orderBy: { booking_code: 'desc' },
@@ -27,7 +31,7 @@ export class BookingService {
   async create(createBookingDto: CreateBookingDto) {
     const bookingCode = await this.generateBookingCode();
 
-    return await this.prismaService.booking.create({
+    const booking = await this.prismaService.booking.create({
       data: {
         ...createBookingDto,
         booking_code: bookingCode,
@@ -44,6 +48,13 @@ export class BookingService {
         }
       }
     });
+
+    const snap = await this.midtransService.createTransaction(booking);
+
+    return {
+        token: snap.token,
+        redirect_url: snap.redirect_url
+    }
   }
 
   async findAll(tanggal_main?: string) {

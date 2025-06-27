@@ -95,9 +95,9 @@ model Booking {
   cabang_id             String?
   tanggal_main          DateTime
   tanggal_transaksi     DateTime
-  metode_pembayaran     String
+  metode_pembayaran     String?
   total_harga           Int
-  status_pembayaran     StatusPembayaran
+  status_pembayaran     StatusPembayaran @default(Pending)
   status_booking        StatusBooking
   booking_details       BookingDetail[]
 }

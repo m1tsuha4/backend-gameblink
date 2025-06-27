@@ -13,6 +13,7 @@ import { CabangModule } from './cabang/cabang.module';
 import { UnitModule } from './unit/unit.module';
 import { KetersediaanModule } from './ketersediaan/ketersediaan.module';
 import { BookingModule } from './booking/booking.module';
+import { MidtransModule } from './midtrans/midtrans.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { BookingModule } from './booking/booking.module';
     UnitModule,
     KetersediaanModule,
     BookingModule,
+    MidtransModule,
   ],
   controllers: [AppController],
   providers: [AppService, WinstonLoggerService],
