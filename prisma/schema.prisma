@@ -108,7 +108,7 @@ model BookingDetail {
   unit_id     String
   jam_main    String
   harga       Int
-  
+  tanggal     DateTime
   booking     Booking @relation(fields: [booking_id], references: [id], onDelete: Cascade)
   unit        Unit    @relation(fields: [unit_id], references: [id], onDelete: Cascade)
 }

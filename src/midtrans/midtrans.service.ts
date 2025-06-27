@@ -44,18 +44,23 @@ export class MidtransService {
     const bookingCode = orderId;
 
     let status_pembayaran: 'Berhasil' | 'Pending' | 'Gagal';
+    let status_booking: 'Aktif' | 'Selesai' | 'Dibatalkan';
 
     if (['settlement', 'capture'].includes(transactionStatus)) {
       status_pembayaran = 'Berhasil';
+      status_booking = 'Aktif';
     } else if (transactionStatus === 'pending') {
       status_pembayaran = 'Pending';
+      status_booking = 'Aktif';
     } else {
       status_pembayaran = 'Gagal';
+      status_booking = 'Dibatalkan';
     }
 
     await this.prisma.booking.updateMany({
       where: { booking_code: bookingCode },
       data: {
+        status_booking,
         status_pembayaran,
         metode_pembayaran: paymentType,
       },

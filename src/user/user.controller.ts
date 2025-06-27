@@ -27,21 +27,17 @@ export class UserController {
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   findAll() {
     return this.userService.findAll();
   }
 
   @Get(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   findOne(@Param('id') id: string) {
     return this.userService.findById(id);
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard)
   update(
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateUserSchema)) updateUserDto: UpdateUserDto,
@@ -50,8 +46,7 @@ export class UserController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard)
   remove(@Param('id') id: string) {
     return this.userService.deleteUser(id);
   }

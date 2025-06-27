@@ -5,6 +5,7 @@ export const CreateBookingWithDetailsSchema = z.object({
   unit_id: z.string().uuid(),
   jam_main: z.string(),
   harga: z.number(),
+  tanggal: z.string(),
 });
 
 export const CreateBookingSchema = z.object({
