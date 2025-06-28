@@ -14,10 +14,12 @@ export class PrismaService
           url: configService.get('DATABASE_URL'),
         },
       },
+      log: ['query', 'info', 'warn', 'error'],
     });
   }
   async onModuleInit() {
     await this.$connect();
+    console.log('Database connected');
   }
   async onModuleDestroy() {
     await this.$disconnect();

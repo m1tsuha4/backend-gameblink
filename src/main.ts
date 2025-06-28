@@ -8,11 +8,11 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: 'https://gameblink-eta.vercel.app',
+    origin: process.env.CORS_ORIGIN,
   });
 
   const config = new DocumentBuilder()
-    .setTitle('Berita')
+    .setTitle('Gameblink')
     .setDescription('API documentation for berita')
     .setVersion('1.0')
     .build();
