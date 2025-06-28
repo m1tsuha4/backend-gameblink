@@ -14,6 +14,7 @@ import { UnitModule } from './unit/unit.module';
 import { KetersediaanModule } from './ketersediaan/ketersediaan.module';
 import { BookingModule } from './booking/booking.module';
 import { MidtransModule } from './midtrans/midtrans.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { MidtransModule } from './midtrans/midtrans.module';
     KetersediaanModule,
     BookingModule,
     MidtransModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService, WinstonLoggerService],
