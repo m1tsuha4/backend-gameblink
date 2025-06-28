@@ -9,7 +9,7 @@ export const CreateKetersediaanSchema = z.object({
   tanggal_selesai_blokir: z.string().optional(), // Accept as string (ISO format)
   jam_selesai_blokir: z.string().optional(),
   keterangan: z.string().min(3).max(1000),
-  status: z.enum(['Selesai', 'Pending']).default('Pending'),
+  status_perbaikan: z.enum(['Selesai', 'Pending']).default('Pending'),
 });
 
 export class CreateKetersediaanDto extends createZodDto(
