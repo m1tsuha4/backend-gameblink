@@ -65,7 +65,7 @@ export class DashboardService {
             bestCabangName = cabang?.nama_cabang ?? null;
         }
 
-        const available = 35;
+        const available = await this.prisma.unit.count({});
 
         return {
             countBookingToday,
