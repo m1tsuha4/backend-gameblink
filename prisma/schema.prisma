@@ -99,7 +99,7 @@ model Booking {
   metode_pembayaran     String?
   total_harga           Int
   status_pembayaran     StatusPembayaran @default(Pending)
-  status_booking        StatusBooking
+  status_booking        StatusBooking @default(TidakAktif)
   booking_details       BookingDetail[]
 }
 
@@ -122,6 +122,7 @@ enum StatusPembayaran {
 
 enum StatusBooking {
   Aktif
+  TidakAktif
   Selesai
   Dibatalkan
 }

@@ -17,7 +17,7 @@ export class MidtransService {
   async createTransaction(booking: any) {
     const payload = {
       transaction_details: {
-        order_id: booking.booking_code,
+        order_id: `${booking.id} (${booking.booking_code})`,
         gross_amount: booking.total_harga,
       },
       customer_details: {
@@ -41,24 +41,24 @@ export class MidtransService {
     const transactionStatus = notification.transaction_status;
     const paymentType = notification.payment_type;
 
-    const bookingCode = orderId;
+    const bookingId = orderId.split(' ')[0];
 
     let status_pembayaran: 'Berhasil' | 'Pending' | 'Gagal';
-    let status_booking: 'Aktif' | 'Selesai' | 'Dibatalkan';
+    let status_booking: 'Aktif' | 'Selesai' | 'Dibatalkan' | 'TidakAktif';
 
     if (['settlement', 'capture'].includes(transactionStatus)) {
       status_pembayaran = 'Berhasil';
       status_booking = 'Aktif';
     } else if (transactionStatus === 'pending') {
       status_pembayaran = 'Pending';
-      status_booking = 'Aktif';
+      status_booking = 'TidakAktif';
     } else {
       status_pembayaran = 'Gagal';
       status_booking = 'Dibatalkan';
     }
 
     await this.prisma.booking.updateMany({
-      where: { booking_code: bookingCode },
+      where: { id: bookingId },
       data: {
         status_booking,
         status_pembayaran,

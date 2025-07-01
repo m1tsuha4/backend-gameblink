@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MidtransService } from 'src/midtrans/midtrans.service';
+import { StatusBooking, StatusPerbaikan } from '@prisma/client';
 
 @Injectable()
 export class BookingService {
@@ -29,31 +30,91 @@ export class BookingService {
     return `BK${nextNumber.toString().padStart(5, '0')}`;
   }
   async create(createBookingDto: CreateBookingDto) {
-    const bookingCode = await this.generateBookingCode();
+    const { booking_details, tanggal_main } = createBookingDto;
 
-    const booking = await this.prismaService.booking.create({
-      data: {
-        ...createBookingDto,
-        booking_code: bookingCode,
-        booking_details: {
-          create: createBookingDto.booking_details
-        }
-      },
-      include: {
-        cabang: true,
-        booking_details: {
-          include: {
-            unit: true
+    const bookingDate = new Date(tanggal_main);
+    bookingDate.setUTCHours(0, 0, 0, 0);
+    
+    // Perform pre-booking check
+    for (const detail of booking_details) {
+      const { unit_id, jam_main } = detail;
+
+      const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
+        where: {
+          unit_id: unit_id,
+          jam_main: jam_main,
+          tanggal: bookingDate,
+          booking: {
+            status_booking: StatusBooking.Aktif
           }
         }
+      });;
+      
+      if (existingActiveBookingDetail) {
+        throw new BadRequestException(`Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
       }
-    });
 
-    const snap = await this.midtransService.createTransaction(booking);
+      const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
+        where: {
+          unit_id: unit_id,
+          status_perbaikan: StatusPerbaikan.Pending,
 
-    return {
+          tanggal_mulai_blokir: {
+            lte: bookingDate
+          },
+          OR: [
+            {
+              tanggal_selesai_blokir: null,
+            },
+            {
+              tanggal_selesai_blokir: {
+                gte: bookingDate
+              }
+            }
+          ]
+        }
+      });
+
+      if (blockedUnitKetersediaan) {
+        throw new BadRequestException( `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`)
+      }
+    }
+
+    // If all check pass, create the booking
+    try {
+      const bookingCode = await this.generateBookingCode();
+      const booking = await this.prismaService.booking.create({
+        data: {
+          ...createBookingDto,
+          booking_code: bookingCode,
+          booking_details: {
+            create: createBookingDto.booking_details
+          }
+        },
+        include: {
+          cabang: true,
+          booking_details: {
+            include: {
+              unit: true
+            }
+          }
+        }
+      });
+      const snap = await this.midtransService.createTransaction(booking);
+
+      return {
         token: snap.token,
-        redirect_url: snap.redirect_url
+        redirect_url: snap.redirect_url,
+      };
+    } catch (error) {
+      // Log the error for debugging purposes
+      console.error('Error creating booking:', error);
+
+      // Re-throw specific errors or a generic one
+      if (error instanceof BadRequestException) {
+        throw error; // Re-throw the validation errors thrown earlier
+      }
+      throw new BadRequestException('Failed to create booking due to an internal error. Please try again.');
     }
   }
 

@@ -18,7 +18,7 @@ export const CreateBookingSchema = z.object({
   metode_pembayaran: z.string().optional(),
   total_harga: z.number().min(1),
   status_pembayaran: z.enum(['Berhasil', 'Gagal', 'Pending']).default('Pending'),
-  status_booking: z.enum(['Aktif', 'Selesai', 'Dibatalkan']),
+  status_booking: z.enum(['Aktif','TidakAktif', 'Selesai', 'Dibatalkan']).default('TidakAktif'),
   booking_details: z.array(CreateBookingWithDetailsSchema),
 });
 

@@ -8,17 +8,20 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: process.env.CORS_ORIGIN,
+    origin: '*',
+    credentials: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type, Accept, Authorization',
   });
 
-  const config = new DocumentBuilder()
-    .setTitle('Gameblink')
-    .setDescription('API documentation for berita')
-    .setVersion('1.0')
-    .build();
+  // const config = new DocumentBuilder()
+  //   .setTitle('Gameblink')
+  //   .setDescription('API documentation for berita')
+  //   .setVersion('1.0')
+  //   .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  // const document = SwaggerModule.createDocument(app, config);
+  // SwaggerModule.setup('api', app, document);
 
   // Apply the global response interceptor
   app.useGlobalInterceptors(new TransformInterceptor());
