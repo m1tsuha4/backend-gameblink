@@ -3,7 +3,7 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MidtransService } from 'src/midtrans/midtrans.service';
-import { StatusBooking, StatusPerbaikan } from '@prisma/client';
+import { StatusBooking, StatusPembayaran, StatusPerbaikan } from '@prisma/client';
 
 @Injectable()
 export class BookingService {
@@ -115,6 +115,101 @@ export class BookingService {
         throw error; // Re-throw the validation errors thrown earlier
       }
       throw new BadRequestException('Failed to create booking due to an internal error. Please try again.');
+    }
+  }
+
+   // New service method for walk-in bookings - MODIFIED HERE
+  async createWalkinBooking(createBookingDto: CreateBookingDto) {
+    const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto; // Keep metode_pembayaran destructuring
+
+    const bookingDate = new Date(tanggal_main);
+    bookingDate.setUTCHours(0, 0, 0, 0);
+
+    // --- Perform pre-booking checks (same as online booking) ---
+    for (const detail of booking_details) {
+      const { unit_id, jam_main } = detail;
+
+      // Check 1: Overlapping active bookings
+      const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
+        where: {
+          unit_id: unit_id,
+          jam_main: jam_main,
+          tanggal: bookingDate,
+          booking: {
+            status_booking: StatusBooking.Aktif,
+          },
+        },
+      });
+
+      if (existingActiveBookingDetail) {
+        throw new BadRequestException(`Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
+      }
+
+      // Check 2: Unit availability based on Ketersediaan (Maintenance/Blockage)
+      const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
+        where: {
+          unit_id: unit_id,
+          status_perbaikan: StatusPerbaikan.Pending,
+          tanggal_mulai_blokir: {
+            lte: bookingDate,
+          },
+          OR: [
+            {
+              tanggal_selesai_blokir: null,
+            },
+            {
+              tanggal_selesai_blokir: {
+                gte: bookingDate,
+              },
+            },
+          ],
+        },
+      });
+
+      if (blockedUnitKetersediaan) {
+        throw new BadRequestException(`Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`);
+      }
+    }
+
+    // --- If all checks pass, create the walk-in booking ---
+    try {
+      const bookingCode = await this.generateBookingCode();
+
+      const booking = await this.prismaService.booking.create({
+        data: {
+          ...createBookingDto,
+          booking_code: bookingCode,
+          tanggal_main: bookingDate,
+          tanggal_transaksi: new Date(),
+          metode_pembayaran: metode_pembayaran, // Now directly uses whatever the frontend provides
+          status_pembayaran: StatusPembayaran.Berhasil, // Still assuming immediate success for walk-in
+          status_booking: StatusBooking.Aktif, // Still assuming active immediately for walk-in
+          booking_details: {
+            create: booking_details.map(detail => ({
+              unit_id: detail.unit_id,
+              jam_main: detail.jam_main,
+              harga: detail.harga,
+              tanggal: bookingDate,
+            })),
+          },
+        },
+        include: {
+          cabang: true,
+          booking_details: {
+            include: {
+              unit: true,
+            },
+          },
+        },
+      });
+
+      return booking; // Returns the created booking object
+    } catch (error) {
+      console.error('Error creating walk-in booking:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to create walk-in booking due to an internal error. Please try again.');
     }
   }
 

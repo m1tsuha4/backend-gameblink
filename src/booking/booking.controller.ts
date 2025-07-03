@@ -31,6 +31,14 @@ export class BookingController {
     return this.bookingService.create(createBookingDto);
   }
 
+  @Post('walkin')
+  createWalkinBooking(
+    @Body(new ZodValidationPipe(CreateBookingSchema))
+    createBookingDto: CreateBookingDto,
+  ) {
+    return this.bookingService.createWalkinBooking(createBookingDto);
+  }
+
   @Get()
   findAll(
      @Query('tanggal_main') tanggal_main: string
