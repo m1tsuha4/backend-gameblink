@@ -87,6 +87,7 @@ export class BookingService {
         data: {
           ...createBookingDto,
           booking_code: bookingCode,
+          booking_type: BookingType.Online,
           booking_details: {
             create: createBookingDto.booking_details
           }
@@ -214,7 +215,7 @@ export class BookingService {
     }
   }
 
-  async findAll(tanggal_main?: string, type?: string) {
+  async findAll(tanggal_main?: string, type?: string, page: number = 1, limit: number = 10) {
      const where: any = {};
 
     if (tanggal_main) {
@@ -224,6 +225,13 @@ export class BookingService {
     if (type) {
       where.booking_type = type;
     }
+
+    // Calculate offset based on page and limit 
+    const offset = (page - 1) * limit;
+    const totalCount = await this.prismaService.booking.count({
+      where
+    });
+
     const booking = await this.prismaService.booking.findMany({
       where,
       include: {
@@ -236,7 +244,9 @@ export class BookingService {
       },
       orderBy: {
         booking_code: 'desc',
-      }
+      },
+      skip: offset,
+      take: limit
     });
 
     if (booking.length === 0) throw new NotFoundException('Booking not found');
@@ -252,7 +262,15 @@ export class BookingService {
       cabang: undefined,
     }));
 
-    return formatedBooking;
+    return {
+      data: formatedBooking,
+      meta: {
+        currentPage: page,
+        pageSize: limit,
+        totalItems:totalCount,
+        totalPage: Math.ceil(totalCount / limit),
+      },
+    };
   }
 
   async findOne(id: string) {
