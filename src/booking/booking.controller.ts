@@ -41,9 +41,10 @@ export class BookingController {
 
   @Get()
   findAll(
-     @Query('tanggal_main') tanggal_main: string
+     @Query('tanggal_main') tanggal_main: string,
+     @Query('type') type: string
   ) {
-    return this.bookingService.findAll(tanggal_main);
+    return this.bookingService.findAll(tanggal_main, type);
   }
 
   @Get(':id')

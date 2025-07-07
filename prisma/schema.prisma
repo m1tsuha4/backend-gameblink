@@ -101,6 +101,12 @@ model Booking {
   status_pembayaran     StatusPembayaran @default(Pending)
   status_booking        StatusBooking @default(TidakAktif)
   booking_details       BookingDetail[]
+  booking_type          BookingType @default(Walkin)
+}
+
+enum BookingType {
+  Walkin
+  Online
 }
 
 model BookingDetail {

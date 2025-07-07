@@ -3,7 +3,7 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MidtransService } from 'src/midtrans/midtrans.service';
-import { StatusBooking, StatusPembayaran, StatusPerbaikan } from '@prisma/client';
+import { BookingType, StatusBooking, StatusPembayaran, StatusPerbaikan } from '@prisma/client';
 
 @Injectable()
 export class BookingService {
@@ -184,6 +184,7 @@ export class BookingService {
           metode_pembayaran: metode_pembayaran, // Now directly uses whatever the frontend provides
           status_pembayaran: StatusPembayaran.Berhasil, // Still assuming immediate success for walk-in
           status_booking: StatusBooking.Aktif, // Still assuming active immediately for walk-in
+          booking_type: BookingType.Walkin,
           booking_details: {
             create: booking_details.map(detail => ({
               unit_id: detail.unit_id,
@@ -213,11 +214,15 @@ export class BookingService {
     }
   }
 
-  async findAll(tanggal_main?: string) {
+  async findAll(tanggal_main?: string, type?: string) {
      const where: any = {};
 
     if (tanggal_main) {
       where.tanggal_main = this.buildDateRange(tanggal_main);
+    }
+
+    if (type) {
+      where.booking_type = type;
     }
     const booking = await this.prismaService.booking.findMany({
       where,
@@ -229,6 +234,9 @@ export class BookingService {
           }
         }
       },
+      orderBy: {
+        booking_code: 'desc',
+      }
     });
 
     if (booking.length === 0) throw new NotFoundException('Booking not found');
