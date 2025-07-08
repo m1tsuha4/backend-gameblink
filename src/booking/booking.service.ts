@@ -58,9 +58,8 @@ export class BookingService {
         where: {
           unit_id: unit_id,
           status_perbaikan: StatusPerbaikan.Pending,
-
           tanggal_mulai_blokir: {
-            lte: bookingDate
+            lte: bookingDate,
           },
           OR: [
             {
@@ -68,11 +67,42 @@ export class BookingService {
             },
             {
               tanggal_selesai_blokir: {
-                gte: bookingDate
-              }
-            }
-          ]
-        }
+                gte: bookingDate, 
+              },
+            },
+          ],
+          AND: [
+            {
+              OR: [
+                {
+                  tanggal_mulai_blokir: { lt: bookingDate },
+                },
+                {
+                  AND: [
+                    { tanggal_mulai_blokir: bookingDate },
+                    { jam_mulai_blokir: { lte: jam_main } }, 
+                  ],
+                },
+              ],
+            },
+            {
+              OR: [
+                {
+                  tanggal_selesai_blokir: null, 
+                },
+                {
+                  tanggal_selesai_blokir: { gt: bookingDate }, 
+                },
+                {
+                  AND: [
+                    { tanggal_selesai_blokir: bookingDate },
+                    { jam_selesai_blokir: { gte: jam_main } },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
       });
 
       if (blockedUnitKetersediaan) {
@@ -160,8 +190,39 @@ export class BookingService {
             },
             {
               tanggal_selesai_blokir: {
-                gte: bookingDate,
+                gte: bookingDate, 
               },
+            },
+          ],
+          AND: [
+            {
+              OR: [
+                {
+                  tanggal_mulai_blokir: { lt: bookingDate },
+                },
+                {
+                  AND: [
+                    { tanggal_mulai_blokir: bookingDate },
+                    { jam_mulai_blokir: { lte: jam_main } }, 
+                  ],
+                },
+              ],
+            },
+            {
+              OR: [
+                {
+                  tanggal_selesai_blokir: null, 
+                },
+                {
+                  tanggal_selesai_blokir: { gt: bookingDate }, 
+                },
+                {
+                  AND: [
+                    { tanggal_selesai_blokir: bookingDate },
+                    { jam_selesai_blokir: { gte: jam_main } },
+                  ],
+                },
+              ],
             },
           ],
         },
@@ -215,7 +276,7 @@ export class BookingService {
     }
   }
 
-  async findAll(tanggal_main?: string, type?: string, page: number = 1, limit: number = 10) {
+  async findAll(tanggal_main?: string,cabang?: string, type?: string, page: number = 1, limit: number = 10) {
      const where: any = {};
 
     if (tanggal_main) {
@@ -224,6 +285,10 @@ export class BookingService {
 
     if (type) {
       where.booking_type = type;
+    }
+
+    if (cabang) {
+      where.cabang_id = cabang;
     }
 
     // Calculate offset based on page and limit 

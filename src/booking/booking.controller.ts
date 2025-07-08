@@ -42,11 +42,12 @@ export class BookingController {
   @Get()
   findAll(
      @Query('tanggal_main') tanggal_main: string,
+     @Query('cabang') cabang: string,
      @Query('type') type: string,
      @Query('page') page: number = 1,
      @Query('limit') limit: number = 10
   ) {
-    return this.bookingService.findAll(tanggal_main, type, page, limit);
+    return this.bookingService.findAll(tanggal_main, cabang, type, page, limit);
   }
 
   @Get(':id')
