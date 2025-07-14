@@ -14,27 +14,64 @@ export class MidtransService {
     });
   }
 
-  async createTransaction(booking: any) {
-    const payload = {
-      transaction_details: {
-        order_id: `${booking.id} (${booking.booking_code})`,
-        gross_amount: booking.total_harga,
-      },
-      customer_details: {
-        first_name: booking.nama,
-        email: booking.email,
-        phone: booking.nomor_hp,
-      },
-      item_details: booking.booking_details.map((detail, index) => ({
-        id: `unit-${index + 1}`,
-        name: `Sewa ${detail.unit?.nama_unit + ' ' + detail.unit?.jenis_konsol || 'Unit'} @ ${detail.jam_main}`,
-        quantity: 1,
-        price: detail.harga,
-      })),
-    };
+async createTransaction(booking: any) {
+  const baseAmount = booking.total_harga;
+  const paymentMethod = booking.payment_method; // from client
+  let fee = 0;
 
-    return await this.snap.createTransaction(payload);
+// Calculate fee based on payment method
+switch (paymentMethod) {
+  case 'bank_transfer':
+    fee = 4000;
+    break;
+  case 'gopay':
+  case 'shopeepay':
+    fee = Math.round(baseAmount * 0.02); // 2%
+    break;
+  case 'qris':
+    fee = Math.round(baseAmount * 0.007); // 0.7%
+    break;
+  case 'dana':
+    fee = Math.round(baseAmount * 0.015); // 1.5%
+    break;
+  default:
+    fee = 0;
+}
+
+  const itemDetails = booking.booking_details.map((detail, index) => ({
+    id: `unit-${index + 1}`,
+    name: `Sewa ${detail.unit_id} @ ${detail.jam_main}`,
+    quantity: 1,
+    price: detail.harga,
+  }));
+
+  // Add convenience fee to item details
+  if (fee > 0) {
+    itemDetails.push({
+      id: 'fee',
+      name: 'Convenience Fee',
+      quantity: 1,
+      price: fee,
+    });
   }
+
+  const payload = {
+    transaction_details: {
+      order_id: `BK-${Date.now()}`, // or use your own booking.id
+      gross_amount: baseAmount + fee,
+    },
+    customer_details: {
+      first_name: booking.nama,
+      email: booking.email,
+      phone: booking.nomor_hp,
+    },
+    item_details: itemDetails,
+    enabled_payments: [paymentMethod], // restrict to chosen method
+  };
+
+  return await this.snap.createTransaction(payload);
+}
+
 
  async handleNotification(notification: any) {
     const orderId = notification.order_id;
