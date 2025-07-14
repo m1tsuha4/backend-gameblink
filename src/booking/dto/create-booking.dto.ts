@@ -21,6 +21,7 @@ export const CreateBookingSchema = z.object({
   status_booking: z.enum(['Aktif','TidakAktif', 'Selesai', 'Dibatalkan']).default('TidakAktif'),
   booking_details: z.array(CreateBookingWithDetailsSchema),
   booking_type: z.enum(['Walkin', 'Online']).default('Walkin'),
+  payment_type: z.enum(['bank_transfer', 'gopay', 'shopeepay', 'qris', 'dana']),
 });
 
 export class CreateBookingDto extends createZodDto(CreateBookingSchema) {}

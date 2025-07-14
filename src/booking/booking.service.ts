@@ -142,7 +142,7 @@ async create(createBookingDto: CreateBookingDto) {
       },
     });
 
-    const snap = await this.midtransService.createTransaction(booking);
+    const snap = await this.midtransService.createTransaction(booking, createBookingDto.payment_type);
 
     return {
       token: snap.token,

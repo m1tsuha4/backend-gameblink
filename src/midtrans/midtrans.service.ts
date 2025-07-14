@@ -14,9 +14,8 @@ export class MidtransService {
     });
   }
 
-async createTransaction(booking: any) {
+async createTransaction(booking: any, paymentMethod: string) {
   const baseAmount = booking.total_harga;
-  const paymentMethod = booking.payment_method; // from client
   let fee = 0;
 
 // Calculate fee based on payment method
