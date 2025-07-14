@@ -11,6 +11,13 @@ export class BookingService {
     private prismaService: PrismaService,
     private midtransService: MidtransService
   ) {}
+   private isTimeBetween(
+    bookingTime: string,
+    startTime: string,
+    endTime: string,
+  ): boolean {
+    return bookingTime >= startTime && bookingTime < endTime; 
+  }
   private async generateBookingCode(): Promise<string> {
     const lastBooking = await this.prismaService.booking.findFirst({
       orderBy: { booking_code: 'desc' },
@@ -54,61 +61,83 @@ export class BookingService {
         throw new BadRequestException(`Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
       }
 
+      // 2. Check for blocked unit availability considering both date and time
       const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
         where: {
           unit_id: unit_id,
           status_perbaikan: StatusPerbaikan.Pending,
+          // Check if the bookingDate falls within the block's date range
           tanggal_mulai_blokir: {
             lte: bookingDate,
           },
           OR: [
             {
-              tanggal_selesai_blokir: null,
+              tanggal_selesai_blokir: null, // Blocked indefinitely
             },
             {
               tanggal_selesai_blokir: {
-                gte: bookingDate, 
+                gte: bookingDate, // Blocked up to or including tanggal_selesai_blokir
               },
-            },
-          ],
-          AND: [
-            {
-              OR: [
-                {
-                  tanggal_mulai_blokir: { lt: bookingDate },
-                },
-                {
-                  AND: [
-                    { tanggal_mulai_blokir: bookingDate },
-                    { jam_mulai_blokir: { lte: jam_main } }, 
-                  ],
-                },
-              ],
-            },
-            {
-              OR: [
-                {
-                  tanggal_selesai_blokir: null, 
-                },
-                {
-                  tanggal_selesai_blokir: { gt: bookingDate }, 
-                },
-                {
-                  AND: [
-                    { tanggal_selesai_blokir: bookingDate },
-                    { jam_selesai_blokir: { gte: jam_main } },
-                  ],
-                },
-              ],
             },
           ],
         },
       });
 
       if (blockedUnitKetersediaan) {
+        const blockStartDate = blockedUnitKetersediaan.tanggal_mulai_blokir;
+        const blockEndDate = blockedUnitKetersediaan.tanggal_selesai_blokir;
+            // Default to '00:00' if jam_mulai_blokir is null, implying block from start of day
+        const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
+        // Default to '23:59' if jam_selesai_blokir is null, implying block until end of day
+        const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
+
+        // Normalize block dates to compare just the date part
+        blockStartDate.setUTCHours(0, 0, 0, 0);
+        if (blockEndDate) {
+          blockEndDate.setUTCHours(0, 0, 0, 0);
+        }
+
+        let isBlockedByTime = false;
+
+        // Scenario 1: Booking date is strictly *between* block start and end dates (full day blocked)
+        if (blockStartDate < bookingDate && (!blockEndDate || bookingDate < blockEndDate)) {
+          isBlockedByTime = true; // Entire day is blocked
+        }
+        // Scenario 2: Booking date is the same as the block start date
+        else if (blockStartDate.getTime() === bookingDate.getTime()) {
+            if (!blockEndDate || bookingDate < blockEndDate) {
+                // If block spans multiple days or ends after booking date
+                isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59'); // Blocked from start time to end of day
+            } else if (blockEndDate.getTime() === bookingDate.getTime()) {
+                // If block starts and ends on the same day
+                isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, blockEndTime);
+            }
+        }
+        // Scenario 3: Booking date is the same as the block end date (and not the start date)
+        else if (blockEndDate && blockEndDate.getTime() === bookingDate.getTime()) {
+            isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime); // Blocked from start of day to end time
+        }
+        // Scenario 4: Indefinite block (tanggal_selesai_blokir is null)
+        else if (!blockEndDate && blockStartDate.getTime() === bookingDate.getTime()) {
+            isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59'); // Blocked from start time to end of day
+        }
+        // Scenario 5: Booking date is after the block start date and block is indefinite
+        else if (!blockEndDate && blockStartDate < bookingDate) {
+             isBlockedByTime = true; // Entire day is blocked as it's an indefinite block that started earlier
+        }
+
+
+        if (isBlockedByTime) {
+          throw new BadRequestException(
+            `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`,
+          );
+        }
+
+      if (blockedUnitKetersediaan) {
         throw new BadRequestException( `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`)
       }
     }
+  }
 
     // If all check pass, create the booking
     try {
@@ -149,6 +178,7 @@ export class BookingService {
     }
   }
 
+
    // New service method for walk-in bookings - MODIFIED HERE
   async createWalkinBooking(createBookingDto: CreateBookingDto) {
     const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto; // Keep metode_pembayaran destructuring
@@ -176,61 +206,81 @@ export class BookingService {
         throw new BadRequestException(`Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
       }
 
-      // Check 2: Unit availability based on Ketersediaan (Maintenance/Blockage)
-      const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
+     const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
         where: {
           unit_id: unit_id,
           status_perbaikan: StatusPerbaikan.Pending,
+          // Check if the bookingDate falls within the block's date range
           tanggal_mulai_blokir: {
             lte: bookingDate,
           },
           OR: [
             {
-              tanggal_selesai_blokir: null,
+              tanggal_selesai_blokir: null, // Blocked indefinitely
             },
             {
               tanggal_selesai_blokir: {
-                gte: bookingDate, 
+                gte: bookingDate, // Blocked up to or including tanggal_selesai_blokir
               },
-            },
-          ],
-          AND: [
-            {
-              OR: [
-                {
-                  tanggal_mulai_blokir: { lt: bookingDate },
-                },
-                {
-                  AND: [
-                    { tanggal_mulai_blokir: bookingDate },
-                    { jam_mulai_blokir: { lte: jam_main } }, 
-                  ],
-                },
-              ],
-            },
-            {
-              OR: [
-                {
-                  tanggal_selesai_blokir: null, 
-                },
-                {
-                  tanggal_selesai_blokir: { gt: bookingDate }, 
-                },
-                {
-                  AND: [
-                    { tanggal_selesai_blokir: bookingDate },
-                    { jam_selesai_blokir: { gte: jam_main } },
-                  ],
-                },
-              ],
             },
           ],
         },
       });
 
       if (blockedUnitKetersediaan) {
-        throw new BadRequestException(`Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`);
+        const blockStartDate = blockedUnitKetersediaan.tanggal_mulai_blokir;
+        const blockEndDate = blockedUnitKetersediaan.tanggal_selesai_blokir;
+       // Default to '00:00' if jam_mulai_blokir is null, implying block from start of day
+        const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
+        // Default to '23:59' if jam_selesai_blokir is null, implying block until end of day
+        const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
+
+        // Normalize block dates to compare just the date part
+        blockStartDate.setUTCHours(0, 0, 0, 0);
+        if (blockEndDate) {
+          blockEndDate.setUTCHours(0, 0, 0, 0);
+        }
+
+        let isBlockedByTime = false;
+
+        // Scenario 1: Booking date is strictly *between* block start and end dates (full day blocked)
+        if (blockStartDate < bookingDate && (!blockEndDate || bookingDate < blockEndDate)) {
+          isBlockedByTime = true; // Entire day is blocked
+        }
+        // Scenario 2: Booking date is the same as the block start date
+        else if (blockStartDate.getTime() === bookingDate.getTime()) {
+            if (!blockEndDate || bookingDate < blockEndDate) {
+                // If block spans multiple days or ends after booking date
+                isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59'); // Blocked from start time to end of day
+            } else if (blockEndDate.getTime() === bookingDate.getTime()) {
+                // If block starts and ends on the same day
+                isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, blockEndTime);
+            }
+        }
+        // Scenario 3: Booking date is the same as the block end date (and not the start date)
+        else if (blockEndDate && blockEndDate.getTime() === bookingDate.getTime()) {
+            isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime); // Blocked from start of day to end time
+        }
+        // Scenario 4: Indefinite block (tanggal_selesai_blokir is null)
+        else if (!blockEndDate && blockStartDate.getTime() === bookingDate.getTime()) {
+            isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59'); // Blocked from start time to end of day
+        }
+        // Scenario 5: Booking date is after the block start date and block is indefinite
+        else if (!blockEndDate && blockStartDate < bookingDate) {
+             isBlockedByTime = true; // Entire day is blocked as it's an indefinite block that started earlier
+        }
+
+
+        if (isBlockedByTime) {
+          throw new BadRequestException(
+            `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`,
+          );
+        }
+
+      if (blockedUnitKetersediaan) {
+        throw new BadRequestException( `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`)
       }
+    }
     }
 
     // --- If all checks pass, create the walk-in booking ---
