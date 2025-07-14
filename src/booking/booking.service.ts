@@ -246,19 +246,12 @@ async createWalkinBooking(createBookingDto: CreateBookingDto) {
       data: {
         ...createBookingDto,
         booking_code: bookingCode,
-        tanggal_main: bookingDate,
-        tanggal_transaksi: new Date(),
         metode_pembayaran,
         status_pembayaran: StatusPembayaran.Berhasil,
         status_booking: StatusBooking.Aktif,
         booking_type: BookingType.Walkin,
         booking_details: {
-          create: booking_details.map(detail => ({
-            unit_id: detail.unit_id,
-            jam_main: detail.jam_main,
-            harga: detail.harga,
-            tanggal: bookingDate,
-          })),
+         create: createBookingDto.booking_details,
         },
       },
       include: {
