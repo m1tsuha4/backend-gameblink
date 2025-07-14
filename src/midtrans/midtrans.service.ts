@@ -14,12 +14,12 @@ export class MidtransService {
     });
   }
 
-async createTransaction(booking: any, paymentMethod: string) {
+async createTransaction(booking: any, paymentType: any) {
   const baseAmount = booking.total_harga;
   let fee = 0;
 
 // Calculate fee based on payment method
-switch (paymentMethod) {
+switch (paymentType) {
   case 'bank_transfer':
     fee = 4000;
     break;
@@ -65,7 +65,7 @@ switch (paymentMethod) {
       phone: booking.nomor_hp,
     },
     item_details: itemDetails,
-    enabled_payments: [paymentMethod], // restrict to chosen method
+    enabled_payments: [paymentType], // restrict to chosen method
   };
 
   return await this.snap.createTransaction(payload);

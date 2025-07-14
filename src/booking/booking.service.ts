@@ -33,7 +33,7 @@ export class BookingService {
     return `BK${nextNumber.toString().padStart(5, '0')}`;
   }
 async create(createBookingDto: CreateBookingDto) {
-  const { booking_details, tanggal_main } = createBookingDto;
+  const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
 
   const bookingDate = new Date(tanggal_main);
   bookingDate.setHours(0, 0, 0, 0);
@@ -126,6 +126,7 @@ async create(createBookingDto: CreateBookingDto) {
     const booking = await this.prismaService.booking.create({
       data: {
         ...createBookingDto,
+        metode_pembayaran: metode_pembayaran,
         booking_code: bookingCode,
         booking_type: BookingType.Online,
         booking_details: {
@@ -142,7 +143,7 @@ async create(createBookingDto: CreateBookingDto) {
       },
     });
 
-    const snap = await this.midtransService.createTransaction(booking, createBookingDto.payment_type);
+    const snap = await this.midtransService.createTransaction(booking, metode_pembayaran);
 
     return {
       token: snap.token,
