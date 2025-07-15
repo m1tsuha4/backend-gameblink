@@ -10,7 +10,7 @@ export class BookingService {
   constructor(
     private prismaService: PrismaService,
     private midtransService: MidtransService
-  ) {}
+  ) { }
   private isTimeBetween(time: string, start: string, end: string): boolean {
     return start <= time && time <= end;
   }
@@ -23,260 +23,260 @@ export class BookingService {
         }
       }
     });
-    
+
     let nextNumber = 1;
     if (lastBooking && lastBooking.booking_code) {
       const lastNumber = parseInt(lastBooking.booking_code.substring(2));
       nextNumber = lastNumber + 1;
     }
-    
+
     return `BK${nextNumber.toString().padStart(5, '0')}`;
   }
-async create(createBookingDto: CreateBookingDto) {
-  const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
+  async create(createBookingDto: CreateBookingDto) {
+    const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
 
-  const bookingDate = new Date(tanggal_main);
-  bookingDate.setHours(0, 0, 0, 0);
+    const bookingDate = new Date(tanggal_main);
+    bookingDate.setHours(0, 0, 0, 0);
 
-  for (const detail of booking_details) {
-    const { unit_id, jam_main } = detail;
+    for (const detail of booking_details) {
+      const { unit_id, jam_main } = detail;
 
-    // 1. Check if already booked
-    const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
-      where: {
-        unit_id,
-        jam_main,
-        tanggal: bookingDate,
-        booking: {
-          status_booking: StatusBooking.Aktif
+      // 1. Check if already booked
+      const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
+        where: {
+          unit_id,
+          jam_main,
+          tanggal: bookingDate,
+          booking: {
+            status_booking: StatusBooking.Aktif
+          }
+        }
+      });
+
+      if (existingActiveBookingDetail) {
+        throw new BadRequestException(
+          `Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`
+        );
+      }
+
+      // 2. Check for blocked availability
+      const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
+        where: {
+          unit_id,
+          status_perbaikan: StatusPerbaikan.Pending,
+          tanggal_mulai_blokir: {
+            lte: bookingDate,
+          },
+          OR: [
+            { tanggal_selesai_blokir: null },
+            {
+              tanggal_selesai_blokir: {
+                gte: bookingDate,
+              },
+            },
+          ],
+        },
+      });
+
+      if (blockedUnitKetersediaan) {
+        const blockStartDate = new Date(blockedUnitKetersediaan.tanggal_mulai_blokir);
+        const blockEndDate = blockedUnitKetersediaan.tanggal_selesai_blokir
+          ? new Date(blockedUnitKetersediaan.tanggal_selesai_blokir)
+          : null;
+
+        const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
+        const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
+
+        blockStartDate.setHours(0, 0, 0, 0);
+        if (blockEndDate) blockEndDate.setHours(0, 0, 0, 0);
+
+        let isBlockedByTime = false;
+        const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
+
+        // ✅ Case 1: Same day as block start
+        if (isSameDay) {
+          isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
+        }
+
+        // ✅ Case 2: No end date and booking is after block start
+        else if (!blockEndDate && bookingDate > blockStartDate) {
+          isBlockedByTime = true; // Block full day
+        }
+
+        // ✅ Case 3: Has end date
+        else if (blockEndDate) {
+          if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
+            isBlockedByTime = true; // Middle of range
+          } else if (bookingDate.getTime() === blockEndDate.getTime()) {
+            isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime);
+          }
+        }
+
+        if (isBlockedByTime) {
+          throw new BadRequestException(
+            `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir || ''} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`
+          );
         }
       }
-    });
-
-    if (existingActiveBookingDetail) {
-      throw new BadRequestException(
-        `Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`
-      );
     }
 
-    // 2. Check for blocked availability
-    const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
-      where: {
-        unit_id,
-        status_perbaikan: StatusPerbaikan.Pending,
-        tanggal_mulai_blokir: {
-          lte: bookingDate,
+    // 3. Proceed with booking creation
+    try {
+      const bookingCode = await this.generateBookingCode();
+      const booking = await this.prismaService.booking.create({
+        data: {
+          ...createBookingDto,
+          metode_pembayaran: metode_pembayaran,
+          booking_code: bookingCode,
+          booking_type: BookingType.Online,
+          booking_details: {
+            create: createBookingDto.booking_details,
+          },
         },
-        OR: [
-          { tanggal_selesai_blokir: null },
-          {
-            tanggal_selesai_blokir: {
-              gte: bookingDate,
+        include: {
+          cabang: true,
+          booking_details: {
+            include: {
+              unit: true,
             },
           },
-        ],
-      },
-    });
+        },
+      });
 
-    if (blockedUnitKetersediaan) {
-      const blockStartDate = new Date(blockedUnitKetersediaan.tanggal_mulai_blokir);
-      const blockEndDate = blockedUnitKetersediaan.tanggal_selesai_blokir
-        ? new Date(blockedUnitKetersediaan.tanggal_selesai_blokir)
-        : null;
+      const snap = await this.midtransService.createTransaction(booking, metode_pembayaran);
 
-      const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
-      const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
-
-      blockStartDate.setHours(0, 0, 0, 0);
-      if (blockEndDate) blockEndDate.setHours(0, 0, 0, 0);
-
-      let isBlockedByTime = false;
-      const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
-
-      // ✅ Case 1: Same day as block start
-      if (isSameDay) {
-        isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
+      return {
+        token: snap.token,
+        redirect_url: snap.redirect_url,
+      };
+    } catch (error) {
+      console.error('Error creating booking:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
       }
-
-      // ✅ Case 2: No end date and booking is after block start
-      else if (!blockEndDate && bookingDate > blockStartDate) {
-        isBlockedByTime = true; // Block full day
-      }
-
-      // ✅ Case 3: Has end date
-      else if (blockEndDate) {
-        if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
-          isBlockedByTime = true; // Middle of range
-        } else if (bookingDate.getTime() === blockEndDate.getTime()) {
-          isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime);
-        }
-      }
-
-      if (isBlockedByTime) {
-        throw new BadRequestException(
-          `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir || ''} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`
-        );
-      }
+      throw new BadRequestException('Failed to create booking due to an internal error. Please try again.');
     }
   }
 
-  // 3. Proceed with booking creation
-  try {
-    const bookingCode = await this.generateBookingCode();
-    const booking = await this.prismaService.booking.create({
-      data: {
-        ...createBookingDto,
-        metode_pembayaran: metode_pembayaran,
-        booking_code: bookingCode,
-        booking_type: BookingType.Online,
-        booking_details: {
-          create: createBookingDto.booking_details,
-        },
-      },
-      include: {
-        cabang: true,
-        booking_details: {
-          include: {
-            unit: true,
+  async createWalkinBooking(createBookingDto: CreateBookingDto) {
+    const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
+
+    const bookingDate = new Date(tanggal_main);
+    bookingDate.setHours(0, 0, 0, 0);
+
+    for (const detail of booking_details) {
+      const { unit_id, jam_main } = detail;
+
+      // Check if already booked
+      const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
+        where: {
+          unit_id: unit_id,
+          jam_main: jam_main,
+          tanggal: bookingDate,
+          booking: {
+            status_booking: StatusBooking.Aktif,
           },
         },
-      },
-    });
+      });
 
-    const snap = await this.midtransService.createTransaction(booking, metode_pembayaran);
-
-    return {
-      token: snap.token,
-      redirect_url: snap.redirect_url,
-    };
-  } catch (error) {
-    console.error('Error creating booking:', error);
-    if (error instanceof BadRequestException) {
-      throw error;
-    }
-    throw new BadRequestException('Failed to create booking due to an internal error. Please try again.');
-  }
-}
-
-async createWalkinBooking(createBookingDto: CreateBookingDto) {
-  const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
-
-  const bookingDate = new Date(tanggal_main);
-  bookingDate.setHours(0, 0, 0, 0);
-
-  for (const detail of booking_details) {
-    const { unit_id, jam_main } = detail;
-
-    // Check if already booked
-    const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
-      where: {
-        unit_id: unit_id,
-        jam_main: jam_main,
-        tanggal: bookingDate,
-        booking: {
-          status_booking: StatusBooking.Aktif,
-        },
-      },
-    });
-
-    if (existingActiveBookingDetail) {
-      throw new BadRequestException(`Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
-    }
-
-    // Check if blocked
-    const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
-      where: {
-        unit_id: unit_id,
-        status_perbaikan: StatusPerbaikan.Pending,
-        tanggal_mulai_blokir: {
-          lte: bookingDate,
-        },
-        OR: [
-          { tanggal_selesai_blokir: null },
-          { tanggal_selesai_blokir: { gte: bookingDate } },
-        ],
-      },
-    });
-
-    if (blockedUnitKetersediaan) {
-      const blockStartDate = new Date(blockedUnitKetersediaan.tanggal_mulai_blokir);
-      const blockEndDate = blockedUnitKetersediaan.tanggal_selesai_blokir
-        ? new Date(blockedUnitKetersediaan.tanggal_selesai_blokir)
-        : null;
-
-      const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
-      const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
-
-      blockStartDate.setHours(0, 0, 0, 0);
-      if (blockEndDate) blockEndDate.setHours(0, 0, 0, 0);
-
-      let isBlockedByTime = false;
-      const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
-
-      // ✅ Case 1: Booking on same day as block start
-      if (isSameDay) {
-        isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
+      if (existingActiveBookingDetail) {
+        throw new BadRequestException(`Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
       }
-      // ✅ Case 2: Indefinite block and booking after block start
-      else if (!blockEndDate && bookingDate > blockStartDate) {
-        isBlockedByTime = true;
-      }
-      // ✅ Case 3: Has end date
-      else if (blockEndDate) {
-        if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
+
+      // Check if blocked
+      const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
+        where: {
+          unit_id: unit_id,
+          status_perbaikan: StatusPerbaikan.Pending,
+          tanggal_mulai_blokir: {
+            lte: bookingDate,
+          },
+          OR: [
+            { tanggal_selesai_blokir: null },
+            { tanggal_selesai_blokir: { gte: bookingDate } },
+          ],
+        },
+      });
+
+      if (blockedUnitKetersediaan) {
+        const blockStartDate = new Date(blockedUnitKetersediaan.tanggal_mulai_blokir);
+        const blockEndDate = blockedUnitKetersediaan.tanggal_selesai_blokir
+          ? new Date(blockedUnitKetersediaan.tanggal_selesai_blokir)
+          : null;
+
+        const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
+        const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
+
+        blockStartDate.setHours(0, 0, 0, 0);
+        if (blockEndDate) blockEndDate.setHours(0, 0, 0, 0);
+
+        let isBlockedByTime = false;
+        const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
+
+        // ✅ Case 1: Booking on same day as block start
+        if (isSameDay) {
+          isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
+        }
+        // ✅ Case 2: Indefinite block and booking after block start
+        else if (!blockEndDate && bookingDate > blockStartDate) {
           isBlockedByTime = true;
-        } else if (bookingDate.getTime() === blockEndDate.getTime()) {
-          isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime);
+        }
+        // ✅ Case 3: Has end date
+        else if (blockEndDate) {
+          if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
+            isBlockedByTime = true;
+          } else if (bookingDate.getTime() === blockEndDate.getTime()) {
+            isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime);
+          }
+        }
+
+        if (isBlockedByTime) {
+          throw new BadRequestException(
+            `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir || ''} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`
+          );
         }
       }
-
-      if (isBlockedByTime) {
-        throw new BadRequestException(
-          `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir || ''} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`
-        );
-      }
     }
-  }
 
-  // Proceed with creating the booking
-  try {
-    const bookingCode = await this.generateBookingCode();
+    // Proceed with creating the booking
+    try {
+      const bookingCode = await this.generateBookingCode();
 
-    const booking = await this.prismaService.booking.create({
-      data: {
-        ...createBookingDto,
-        booking_code: bookingCode,
-        metode_pembayaran,
-        status_pembayaran: StatusPembayaran.Berhasil,
-        status_booking: StatusBooking.Aktif,
-        booking_type: BookingType.Walkin,
-        booking_details: {
-         create: createBookingDto.booking_details,
-        },
-      },
-      include: {
-        cabang: true,
-        booking_details: {
-          include: {
-            unit: true,
+      const booking = await this.prismaService.booking.create({
+        data: {
+          ...createBookingDto,
+          booking_code: bookingCode,
+          metode_pembayaran,
+          status_pembayaran: StatusPembayaran.Berhasil,
+          status_booking: StatusBooking.Aktif,
+          booking_type: BookingType.Walkin,
+          booking_details: {
+            create: createBookingDto.booking_details,
           },
         },
-      },
-    });
+        include: {
+          cabang: true,
+          booking_details: {
+            include: {
+              unit: true,
+            },
+          },
+        },
+      });
 
-    return booking;
-  } catch (error) {
-    console.error('Error creating walk-in booking:', error);
-    if (error instanceof BadRequestException) {
-      throw error;
+      return booking;
+    } catch (error) {
+      console.error('Error creating walk-in booking:', error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to create walk-in booking due to an internal error. Please try again.');
     }
-    throw new BadRequestException('Failed to create walk-in booking due to an internal error. Please try again.');
   }
-}
 
 
-  async findAll(tanggal_main?: string,cabang?: string, type?: string, page: number = 1, limit: number = 10) {
-     const where: any = {};
+  async findAll(tanggal_main?: string, cabang?: string, type?: string, page: number = 1, limit: number = 10) {
+    const where: any = {};
 
     if (tanggal_main) {
       where.tanggal_main = this.buildDateRange(tanggal_main);
@@ -291,7 +291,8 @@ async createWalkinBooking(createBookingDto: CreateBookingDto) {
     }
 
     // Calculate offset based on page and limit 
-    const offset = (page - 1) * limit;
+    const offset = parseInt((page - 1).toString()) * parseInt(limit.toString());
+    const limitNumber = parseInt(limit.toString());
     const totalCount = await this.prismaService.booking.count({
       where
     });
@@ -310,7 +311,7 @@ async createWalkinBooking(createBookingDto: CreateBookingDto) {
         booking_code: 'desc',
       },
       skip: offset,
-      take: limit
+      take: limitNumber
     });
 
     if (booking.length === 0) throw new NotFoundException('Booking not found');
@@ -331,7 +332,7 @@ async createWalkinBooking(createBookingDto: CreateBookingDto) {
       meta: {
         currentPage: page,
         pageSize: limit,
-        totalItems:totalCount,
+        totalItems: totalCount,
         totalPage: Math.ceil(totalCount / limit),
       },
     };
