@@ -1,3 +1,4 @@
+
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -54,6 +55,7 @@ model Cabang {
   Unit          Unit[]
   Ketersediaan  Ketersediaan[]
   Booking       Booking[]
+  createdAt     DateTime         @default(now())
 }
 
 model Unit {

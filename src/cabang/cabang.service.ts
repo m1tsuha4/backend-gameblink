@@ -40,6 +40,9 @@ export class CabangService {
           },
         },
       },
+      orderBy: {
+        createdAt: 'asc',
+      }
     });
 
     if (cabang.length === 0) throw new NotFoundException('Cabang not found');
