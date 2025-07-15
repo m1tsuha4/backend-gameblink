@@ -247,9 +247,11 @@ async createWalkinBooking(createBookingDto: CreateBookingDto) {
         ...createBookingDto,
         booking_code: bookingCode,
         metode_pembayaran,
+        tanggal_main: tanggal_main,
         status_pembayaran: StatusPembayaran.Berhasil,
         status_booking: StatusBooking.Aktif,
         booking_type: BookingType.Walkin,
+        tanggal_transaksi: new Date().toISOString(),
         booking_details: {
          create: createBookingDto.booking_details,
         },
@@ -290,8 +292,10 @@ async createWalkinBooking(createBookingDto: CreateBookingDto) {
       where.cabang_id = cabang;
     }
 
-    // Calculate offset based on page and limit 
-    const offset = (page - 1) * limit;
+    const numericLimit = Number(limit);
+    const numericPage = Number(page);
+    const offset = (numericPage - 1) * numericLimit;
+
     const totalCount = await this.prismaService.booking.count({
       where
     });
@@ -310,7 +314,7 @@ async createWalkinBooking(createBookingDto: CreateBookingDto) {
         booking_code: 'desc',
       },
       skip: offset,
-      take: limit
+      take: numericLimit
     });
 
     if (booking.length === 0) throw new NotFoundException('Booking not found');

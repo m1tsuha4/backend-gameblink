@@ -21,6 +21,9 @@ export class UnitService {
       where: {
         cabang_id: cabang_id,
       },
+      orderBy: {
+        nama_unit: 'asc',
+      }
     });
 
     if (units.length === 0) {
@@ -31,7 +34,11 @@ export class UnitService {
   }
 
   async findAll() {
-    const unit = await this.prismaService.unit.findMany({});
+    const unit = await this.prismaService.unit.findMany({
+      orderBy: {
+        nama_unit: 'asc',
+      }
+    });
 
     if (unit.length === 0) throw new NotFoundException('Unit not found');
 
