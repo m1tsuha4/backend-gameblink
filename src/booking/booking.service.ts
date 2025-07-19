@@ -4,6 +4,8 @@ import { UpdateBookingDto } from './dto/update-booking.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { MidtransService } from 'src/midtrans/midtrans.service';
 import { BookingType, StatusBooking, StatusPembayaran, StatusPerbaikan } from '@prisma/client';
+import { Parser } from 'json2csv';
+import * as ExcelJS from 'exceljs';
 
 @Injectable()
 export class BookingService {
@@ -32,6 +34,34 @@ export class BookingService {
 
     return `BK${nextNumber.toString().padStart(5, '0')}`;
   }
+
+  private buildWhere(
+    tanggal_main?: string,
+    cabang?: string,
+    type?: string,
+    metode_pembayaran?: string
+  ) {
+    const where: any = {};
+
+    if (tanggal_main) {
+      where.tanggal_main = this.buildDateRange(tanggal_main);
+    }
+
+    if (type) {
+      where.booking_type = type;
+    }
+
+    if (cabang) {
+      where.cabang_id = cabang;
+    }
+
+    if (metode_pembayaran) {
+      where.metode_pembayaran = metode_pembayaran;
+    }
+
+    return where;
+  }
+
   async create(createBookingDto: CreateBookingDto) {
     const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
 
@@ -277,7 +307,7 @@ export class BookingService {
   }
 
 
-  async findAll(tanggal_main?: string, cabang?: string, type?: string, page: number = 1, limit: number = 10) {
+  async findAll(tanggal_main?: string, cabang?: string, type?: string, metode_pembayaran?: string, page: number = 1, limit: number = 10) {
     const where: any = {};
 
     if (tanggal_main) {
@@ -290,6 +320,10 @@ export class BookingService {
 
     if (cabang) {
       where.cabang_id = cabang;
+    }
+
+    if (metode_pembayaran) {
+      where.metode_pembayaran = metode_pembayaran;
     }
 
     // Calculate offset based on page and limit 
@@ -446,6 +480,117 @@ export class BookingService {
     return this.prismaService.booking.delete({
       where: { id },
     });
+  }
+
+  async exportBookings(
+    tanggal_main?: string,
+    cabang?: string,
+    type?: string,
+    metode_pembayaran?: string,
+    format: 'csv' | 'xlsx' = 'csv'
+  ): Promise<Buffer> {
+    const where = this.buildWhere(tanggal_main, cabang, type, metode_pembayaran);
+
+    console.log('Export filters (where):', where);
+
+    
+    const bookings  = await this.prismaService.booking.findMany({
+      where,
+      include: {
+        cabang: true,
+        booking_details: {
+          include: {
+            unit: true
+          }
+        }
+      },
+      orderBy: {
+        booking_code: 'desc',
+      },
+    });
+    console.log('Found bookings:', bookings.length);
+
+     if (bookings.length === 0) throw new NotFoundException('Booking not found');
+
+     // --- Data Transformation to match UI columns (using your schema) ---
+    const exportData = bookings.map((b) => ({
+      // 1. ID Booking
+      'ID Booking': b.booking_code,
+
+      // 2. Nama (Directly from Booking model)
+      Nama: b.nama,
+
+      // 3. Nomor HP (Directly from Booking model)
+      'Nomor HP': String(b.nomor_hp),
+
+      // 4. Email (Directly from Booking model)
+      Email: b.email,
+
+      // 5. Cabang
+      Cabang: b.cabang?.nama_cabang || '',
+
+      // 6. Tanggal Main (Format as 'DD-MM-YYYY' as seen in UI)
+      'Tanggal Main': b.tanggal_main ? new Date(b.tanggal_main).toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+      }) : '',
+
+      // 7. Tanggal Transaksi (Directly from Booking model)
+      'Tanggal Transaksi': b.tanggal_transaksi ? new Date(b.tanggal_transaksi).toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+      }) : '',
+
+      // 8. Metode Pembayaran
+      'Metode Pembayaran': b.metode_pembayaran || '', // Use empty string if nullable
+
+      // 9. Total Harga (Formatted as IDR currency)
+      'Total Harga': `Rp ${b.total_harga ? b.total_harga.toLocaleString('id-ID') : '0'}`,
+
+      // 10. Status Pembayaran
+      'Status Pembayaran': b.status_pembayaran, // Enum value will be converted to string
+
+      // 11. Status Booking
+      'Status Booking': b.status_booking, // Enum value will be converted to string
+
+      // 12. Tipe Booking
+      'Tipe Booking': b.booking_type, // Enum value will be converted to string
+      // Omit 'Aksi'
+    }));
+
+    if (format === 'csv') {
+      const parser = new Parser();
+      let csv = parser.parse(exportData);
+      csv = 'sep=,\n' + csv; // Add the Excel-specific SEP header
+      return Buffer.from(csv);
+    } else { // XLSX format
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Bookings');
+
+      // Define columns explicitly to match the UI order and headers
+      worksheet.columns = [
+        { header: 'ID Booking', key: 'ID Booking', width: 15 },
+        { header: 'Nama', key: 'Nama', width: 20 },
+        { header: 'Nomor HP', key: 'Nomor HP', width: 15, style: { numFmt: '@' } },
+        { header: 'Email', key: 'Email', width: 25 },
+        { header: 'Cabang', key: 'Cabang', width: 15 },
+        { header: 'Tanggal Main', key: 'Tanggal Main', width: 15 },
+        { header: 'Tanggal Transaksi', key: 'Tanggal Transaksi', width: 18 },
+        { header: 'Metode Pembayaran', key: 'Metode Pembayaran', width: 20 },
+        { header: 'Total Harga', key: 'Total Harga', width: 15 },
+        { header: 'Status Pembayaran', key: 'Status Pembayaran', width: 20 },
+        { header: 'Status Booking', key: 'Status Booking', width: 18 },
+        { header: 'Tipe Booking', key: 'Tipe Booking', width: 15 },
+      ];
+
+      // Add rows using the transformed exportData
+      worksheet.addRows(exportData);
+
+      const arrayBuffer = await workbook.xlsx.writeBuffer();
+      return Buffer.from(arrayBuffer);
+    }
   }
 
   private buildDateRange(dateStr: string) {

@@ -8,6 +8,7 @@ import {
   Param,
   Delete,
   Query,
+  Res
 } from '@nestjs/common';
 import { BookingService } from './booking.service';
 import {
@@ -18,6 +19,7 @@ import {
   UpdateBookingDto,
   UpdateBookingSchema,
 } from './dto/update-booking.dto';
+import { Response } from 'express';
 
 @Controller('booking')
 export class BookingController {
@@ -44,10 +46,34 @@ export class BookingController {
      @Query('tanggal_main') tanggal_main: string,
      @Query('cabang') cabang: string,
      @Query('type') type: string,
+     @Query('metode_pembayaran') metode_pembayaran: string,
      @Query('page') page: number = 1,
      @Query('limit') limit: number = 10
   ) {
-    return this.bookingService.findAll(tanggal_main, cabang, type, page, limit);
+    return this.bookingService.findAll(tanggal_main, cabang, type, metode_pembayaran,page, limit);
+  }
+
+   @Get('export')
+   async exportBookings(
+    @Query('tanggal_main') tanggal_main: string,
+    @Query('cabang') cabang: string,
+    @Query('type') type: string,
+    @Query('metode_pembayaran') metode_pembayaran: string,
+    @Query('format') format: 'csv' | 'xlsx' = 'csv',
+    @Res() res: Response,
+  ) {
+    const fileBuffer = await this.bookingService.exportBookings(
+      tanggal_main,
+      cabang,
+      type,
+      metode_pembayaran,
+      format,
+    );
+
+    const filename = `bookings_export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', format === 'csv' ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(fileBuffer);
   }
 
   @Get(':id')
