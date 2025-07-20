@@ -105,4 +105,67 @@ export class DashboardService {
 
         return results;
     }
+
+    async bookingSummaryByCabangAndKonsol(
+        type?: string,
+        metode_pembayaran?: string,
+        startDate?: string,
+        endDate?: string
+      ) {
+        // Build filter for bookings
+        const where: any = {};
+        if (startDate && endDate) {
+          where.tanggal_main = {
+            gte: new Date(startDate),
+            lte: new Date(endDate),
+          };
+        }
+        if (type) where.booking_type = type;
+        if (metode_pembayaran) where.metode_pembayaran = metode_pembayaran;
+  
+        // Get all cabang and all jenis_konsol
+        const cabangs = await this.prisma.cabang.findMany({
+          select: { id: true, nama_cabang: true }
+        });
+        const units = await this.prisma.unit.findMany({
+          select: { jenis_konsol: true },
+          distinct: ['jenis_konsol']
+        });
+        const konsolTypes = units.map(u => u.jenis_konsol);
+  
+        // Query all bookings with details and units
+        const bookings = await this.prisma.booking.findMany({
+          where,
+          include: {
+            cabang: true,
+            booking_details: {
+              include: { unit: true }
+            }
+          }
+        });
+  
+        // Prepare summary
+        const summary = cabangs.map(cabang => {
+          const cabangBookings = bookings.filter(b => b.cabang_id === cabang.id);
+          const konsolSummary = konsolTypes.map(jenis_konsol => {
+            // Filter booking_details for this konsol
+            const details = cabangBookings.flatMap(b =>
+              b.booking_details.filter(d => d.unit?.jenis_konsol === jenis_konsol)
+            );
+            const totalRevenue = details.reduce((sum, d) => sum + (d.harga || 0), 0);
+            return {
+              jenis_konsol,
+              totalRevenue
+            };
+          });
+          const totalRevenue = konsolSummary.reduce((sum, k) => sum + k.totalRevenue, 0);
+          return {
+            cabang: cabang.nama_cabang,
+            konsolSummary,
+            totalRevenue
+          };
+        });
+  
+        return summary;
+      }
 }
