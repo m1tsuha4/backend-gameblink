@@ -307,7 +307,15 @@ export class BookingService {
   }
 
 
-  async findAll(tanggal_main?: string, cabang?: string, type?: string, metode_pembayaran?: string, page: number = 1, limit: number = 10) {
+  async findAll(
+    tanggal_main?: string,
+    cabang?: string,
+    type?: string,
+    metode_pembayaran?: string,
+    page: number = 1,
+    limit: number = 10,
+    search?: string // <-- Add search param
+  ) {
     const where: any = {};
 
     if (tanggal_main) {
@@ -324,6 +332,15 @@ export class BookingService {
 
     if (metode_pembayaran) {
       where.metode_pembayaran = metode_pembayaran;
+    }
+
+    if (search) {
+      where.OR = [
+        { nama: { contains: search } },
+        { nomor_hp: { contains: search } },
+        { email: { contains: search } },
+        { booking_code: { contains: search } },
+      ];
     }
 
     // Calculate offset based on page and limit 

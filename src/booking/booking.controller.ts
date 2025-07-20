@@ -48,9 +48,18 @@ export class BookingController {
      @Query('type') type: string,
      @Query('metode_pembayaran') metode_pembayaran: string,
      @Query('page') page: number = 1,
-     @Query('limit') limit: number = 10
+     @Query('limit') limit: number = 10,
+     @Query('search') search: string // <-- Add search param
   ) {
-    return this.bookingService.findAll(tanggal_main, cabang, type, metode_pembayaran,page, limit);
+    return this.bookingService.findAll(
+      tanggal_main,
+      cabang,
+      type,
+      metode_pembayaran,
+      page,
+      limit,
+      search // <-- Pass search param
+    );
   }
 
    @Get('export')
