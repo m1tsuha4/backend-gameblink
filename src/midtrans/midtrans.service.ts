@@ -56,7 +56,7 @@ switch (paymentType) {
 
   const payload = {
     transaction_details: {
-      order_id: `BK-${Date.now()}`, // or use your own booking.id
+      order_id: `${booking.id} (${booking.booking_code})`,
       gross_amount: baseAmount + fee,
     },
     customer_details: {
