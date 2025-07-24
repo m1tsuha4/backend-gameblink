@@ -48,7 +48,7 @@ export class BookingController {
      @Query('type') type: string,
      @Query('metode_pembayaran') metode_pembayaran: string,
      @Query('page') page: number = 1,
-     @Query('limit') limit: number = 10,
+     @Query('limit') limit: number,
      @Query('search') search: string // <-- Add search param
   ) {
     return this.bookingService.findAll(

@@ -313,8 +313,8 @@ export class BookingService {
     type?: string,
     metode_pembayaran?: string,
     page: number = 1,
-    limit: number = 10,
-    search?: string // <-- Add search param
+    limit?: number, // allow undefined
+    search?: string
   ) {
     const where: any = {};
 
@@ -344,11 +344,14 @@ export class BookingService {
     }
 
     // Calculate offset based on page and limit 
-    const offset = parseInt((page - 1).toString()) * parseInt(limit.toString());
-    const limitNumber = parseInt(limit.toString());
-    const totalCount = await this.prismaService.booking.count({
-      where
-    });
+    let take: number | undefined = undefined;
+    let skip: number | undefined = undefined;
+    if (limit && limit !== 0 && limit !== Number.POSITIVE_INFINITY) {
+      take = parseInt(limit.toString());
+      skip = parseInt((page - 1).toString()) * take;
+    }
+
+    const totalCount = await this.prismaService.booking.count({ where });
 
     const booking = await this.prismaService.booking.findMany({
       where,
@@ -363,8 +366,8 @@ export class BookingService {
       orderBy: {
         booking_code: 'desc',
       },
-      skip: offset,
-      take: limitNumber
+      ...(take ? { take } : {}),
+      ...(skip ? { skip } : {}),
     });
 
     if (booking.length === 0) throw new NotFoundException('Booking not found');
@@ -384,9 +387,9 @@ export class BookingService {
       data: formatedBooking,
       meta: {
         currentPage: page,
-        pageSize: limit,
+        pageSize: take || totalCount,
         totalItems: totalCount,
-        totalPage: Math.ceil(totalCount / limit),
+        totalPage: take ? Math.ceil(totalCount / take) : 1,
       },
     };
   }

@@ -11,17 +11,18 @@ export class DashboardService {
         const todayStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
         const todayEnd = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 1);
 
-        // Count today's bookings
+        // Count today's bookings (all statuses)
         const countBookingToday = await this.prisma.booking.count({
             where: {
             tanggal_transaksi: {
                 gte: todayStart,
                 lte: todayEnd,
             },
+            status_pembayaran: "Berhasil"
             },
         });
 
-        // Sum total_harga for today
+        // Sum total_harga for today, only status_pembayaran Berhasil
         const revenueResult = await this.prisma.booking.aggregate({
             _sum: {
             total_harga: true,
@@ -31,6 +32,7 @@ export class DashboardService {
                 gte: todayStart,
                 lte: todayEnd,
             },
+            status_pembayaran: 'Berhasil', // Only successful payments
             },
         });
 
@@ -112,8 +114,9 @@ export class DashboardService {
         startDate?: string,
         endDate?: string
       ) {
-        // Build filter for bookings
-        const where: any = {};
+        const where: any = {
+          status_pembayaran: 'Berhasil', // Only successful payments
+        };
         if (startDate && endDate) {
           where.tanggal_main = {
             gte: new Date(startDate),
