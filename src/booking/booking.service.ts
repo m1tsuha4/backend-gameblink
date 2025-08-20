@@ -71,6 +71,28 @@ export class BookingService {
     for (const detail of booking_details) {
       const { unit_id, jam_main } = detail;
 
+      const existingBookingDetail = await this.prismaService.bookingDetail.findFirst({
+        where: {
+          unit_id,
+          jam_main,
+          tanggal: bookingDate,
+          booking: {
+            status_pembayaran: {
+              in: ['Berhasil', 'Pending'], // ✅ Block both paid & waiting payment
+            },
+            status_booking: {
+              in: [StatusBooking.Aktif, StatusBooking.TidakAktif], 
+              // Aktif = confirmed, TidakAktif = while pending
+            },
+          },
+        },
+      });
+
+      if (existingBookingDetail) {
+        throw new BadRequestException(
+          `Unit with ID ${unit_id} is already booked or waiting for payment for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`
+        );
+      }
       // 1. Check if already booked
       const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
         where: {

@@ -14,62 +14,72 @@ export class MidtransService {
     });
   }
 
-async createTransaction(booking: any, paymentType: any) {
-  const baseAmount = booking.total_harga;
-  let fee = 0;
-
-// Calculate fee based on payment method
-switch (paymentType) {
-  case 'bank_transfer':
-    fee = 4000;
-    break;
-  case 'gopay':
-  case 'shopeepay':
-    fee = Math.round(baseAmount * 0.02); // 2%
-    break;
-  case 'qris':
-    fee = Math.round(baseAmount * 0.007); // 0.7%
-    break;
-  case 'dana':
-    fee = Math.round(baseAmount * 0.015); // 1.5%
-    break;
-  default:
-    fee = 0;
-}
-
-  const itemDetails = booking.booking_details.map((detail, index) => ({
-    id: `unit-${index + 1}`,
-    name: `Sewa ${detail.unit_id} @ ${detail.jam_main}`,
-    quantity: 1,
-    price: detail.harga,
-  }));
-
-  // Add convenience fee to item details
-  if (fee > 0) {
-    itemDetails.push({
-      id: 'fee',
-      name: 'Convenience Fee',
+async createTransaction(booking: any, paymentType?: string) { // Jadikan paymentType opsional dengan '?'
+    const baseAmount = booking.total_harga;
+    let fee = 0;
+    
+    // Salin item details asli agar tidak termutasi
+    const itemDetails = booking.booking_details.map((detail, index) => ({
+      id: `unit-${index + 1}`,
+      name: `Sewa ${detail.unit_id} @ ${detail.jam_main}`,
       quantity: 1,
-      price: fee,
-    });
+      price: detail.harga,
+    }));
+
+    // Siapkan payload dasar
+    const payload: any = { // Gunakan 'any' untuk fleksibilitas properti
+      transaction_details: {
+        order_id: `${booking.id} (${booking.booking_code})`,
+      },
+      customer_details: {
+        first_name: booking.nama,
+        email: booking.email,
+        phone: booking.nomor_hp,
+      },
+      item_details: itemDetails,
+    };
+    
+    // Cek jika paymentType diberikan (pengguna memilih di awal)
+    if (paymentType) {
+      // Hitung fee berdasarkan metode yang dipilih
+      switch (paymentType) {
+        case 'bank_transfer':
+          fee = 4000;
+          break;
+        case 'gopay':
+        case 'shopeepay':
+          fee = Math.round(baseAmount * 0.02); // 2%
+          break;
+        case 'other_qris':
+          fee = Math.round(baseAmount * 0.007); // 0.7%
+          break;
+        case 'dana':
+          fee = Math.round(baseAmount * 0.015); // 1.5%
+          break;
+        default:
+          fee = 0;
+      }
+
+      // Tambahkan fee ke item_details jika ada
+      if (fee > 0) {
+        payload.item_details.push({
+          id: 'fee',
+          name: 'Convenience Fee',
+          quantity: 1,
+          price: fee,
+        });
+      }
+      
+      // Atur total harga dan kunci metode pembayaran
+      payload.transaction_details.gross_amount = baseAmount + fee;
+      payload.enabled_payments = [paymentType];
+
+    } else {
+      payload.transaction_details.gross_amount = baseAmount; 
+    }
+
+    return await this.snap.createTransaction(payload);
   }
-
-  const payload = {
-    transaction_details: {
-      order_id: `${booking.id} (${booking.booking_code})`,
-      gross_amount: baseAmount + fee,
-    },
-    customer_details: {
-      first_name: booking.nama,
-      email: booking.email,
-      phone: booking.nomor_hp,
-    },
-    item_details: itemDetails,
-    enabled_payments: [paymentType], // restrict to chosen method
-  };
-
-  return await this.snap.createTransaction(payload);
-}
 
 
  async handleNotification(notification: any) {
