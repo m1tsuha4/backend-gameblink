@@ -466,6 +466,10 @@ export class BookingService {
       ),
     );
 
+    if (updateData.status_booking === 'Dibatalkan') {
+      updateData.status_pembayaran = 'Gagal';
+    }
+
     // If booking_details is provided, handle it separately
     if (booking_details) {
       return await this.prismaService.$transaction(async (tx) => {
