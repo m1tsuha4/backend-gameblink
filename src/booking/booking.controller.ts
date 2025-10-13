@@ -103,4 +103,9 @@ export class BookingController {
   remove(@Param('id') id: string) {
     return this.bookingService.remove(id);
   }
+
+  @Get('cron/expire-pending')
+  async expirePendingCron() {
+    return this.bookingService.expireStalePending();
+  }
 }

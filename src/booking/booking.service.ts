@@ -78,11 +78,10 @@ export class BookingService {
           tanggal: bookingDate,
           booking: {
             status_pembayaran: {
-              in: ['Berhasil', 'Pending'], // ✅ Block both paid & waiting payment
+              in: ['Berhasil', 'Pending'],
             },
             status_booking: {
               in: [StatusBooking.Aktif, StatusBooking.TidakAktif], 
-              // Aktif = confirmed, TidakAktif = while pending
             },
           },
         },
@@ -145,17 +144,17 @@ export class BookingService {
         let isBlockedByTime = false;
         const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
 
-        // ✅ Case 1: Same day as block start
+        //  Case 1: Same day as block start
         if (isSameDay) {
           isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
         }
 
-        // ✅ Case 2: No end date and booking is after block start
+        // Case 2: No end date and booking is after block start
         else if (!blockEndDate && bookingDate > blockStartDate) {
           isBlockedByTime = true; // Block full day
         }
 
-        // ✅ Case 3: Has end date
+        // Case 3: Has end date
         else if (blockEndDate) {
           if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
             isBlockedByTime = true; // Middle of range
@@ -195,12 +194,19 @@ export class BookingService {
         },
       });
 
-      const snap = await this.midtransService.createTransaction(booking, metode_pembayaran);
+      let snap: { token: string; redirect_url: string } | undefined;
+      try {
+        snap = await this.midtransService.createTransaction(booking, metode_pembayaran);
+        if (!snap?.token || !snap?.redirect_url) {
+          throw new Error('Invalid Snap response');
+        }
+      } catch (e) {
+        await this.prismaService.booking.delete({ where: { id: booking.id } });
+        throw new BadRequestException('Gagal membuat transaksi Midtrans. Silakan coba lagi.');
+      }
 
-      return {
-        token: snap.token,
-        redirect_url: snap.redirect_url,
-      };
+      return { token: snap.token, redirect_url: snap.redirect_url };
+
     } catch (error) {
       console.error('Error creating booking:', error);
       if (error instanceof BadRequestException) {
@@ -265,15 +271,15 @@ export class BookingService {
         let isBlockedByTime = false;
         const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
 
-        // ✅ Case 1: Booking on same day as block start
+        // Case 1: Booking on same day as block start
         if (isSameDay) {
           isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
         }
-        // ✅ Case 2: Indefinite block and booking after block start
+        // Case 2: Indefinite block and booking after block start
         else if (!blockEndDate && bookingDate > blockStartDate) {
           isBlockedByTime = true;
         }
-        // ✅ Case 3: Has end date
+        //  Case 3: Has end date
         else if (blockEndDate) {
           if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
             isBlockedByTime = true;
@@ -637,6 +643,23 @@ export class BookingService {
       const arrayBuffer = await workbook.xlsx.writeBuffer();
       return Buffer.from(arrayBuffer);
     }
+  }
+  // mark pending bookings older than 10 minutes as failed
+  async expireStalePending() {
+    const cutoff = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
+
+    const result = await this.prismaService.booking.updateMany({
+      where: {
+        status_pembayaran: 'Pending',
+        tanggal_transaksi: { lt: cutoff },
+      },
+      data: {
+        status_pembayaran: 'Gagal',
+        status_booking: 'Dibatalkan',
+      },
+    });
+
+    return { success: true, expired: result.count };
   }
 
   private buildDateRange(dateStr: string) {
