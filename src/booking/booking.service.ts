@@ -6,13 +6,17 @@ import { MidtransService } from 'src/midtrans/midtrans.service';
 import { BookingType, StatusBooking, StatusPembayaran, StatusPerbaikan } from '@prisma/client';
 import { Parser } from 'json2csv';
 import * as ExcelJS from 'exceljs';
+import { RedisService } from 'src/redis/redis.service';
 
 @Injectable()
 export class BookingService {
   constructor(
     private prismaService: PrismaService,
-    private midtransService: MidtransService
+    private midtransService: MidtransService,
+    private redis: RedisService,
   ) { }
+
+  private readonly SLOT_LOCK_TTL_SECONDS = 10 * 60;
   private isTimeBetween(time: string, start: string, end: string): boolean {
     return start <= time && time <= end;
   }
@@ -62,117 +66,167 @@ export class BookingService {
     return where;
   }
 
+  private slotKey(unitId: string, isoDate: string, hhmm: string) {
+    const normJam = hhmm.replace('.', ':');
+    return `slot:${unitId}:${isoDate}:${normJam}`;
+  }
+
+  private async acquireSlotLocks(
+    isoDate: string,
+    details: { unit_id: string; jam_main: string }[],
+    ttlSec: number,
+  ) {
+    const keys: string[] = [];
+    for (const d of details) {
+      const key = this.slotKey(d.unit_id, isoDate, d.jam_main);
+      const ok = await (this.redis.client as any).set(
+        key,
+        'HOLD',
+        'NX',
+        'EX',
+        ttlSec
+      );
+      if (!ok) {
+        if (keys.length) await this.redis.client.del(...keys);
+        throw new BadRequestException('Slot sedang proses booking, coba jam lain.');
+      }
+      keys.push(key);
+    }
+    return keys;
+  }
+
+  private async releaseLocks(keys: string[]) {
+    if (keys.length) await this.redis.client.del(...keys);
+  }
+
   async create(createBookingDto: CreateBookingDto) {
     const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
+    const isoDate = new Date(tanggal_main).toISOString().slice(0, 10);
+    const ttlSec = this.SLOT_LOCK_TTL_SECONDS;
 
-    const bookingDate = new Date(tanggal_main);
-    bookingDate.setHours(0, 0, 0, 0);
+    const lockKeys = await this.acquireSlotLocks(
+      isoDate,
+      booking_details.map((b) => ({ unit_id: b.unit_id, jam_main: b.jam_main })),
+      ttlSec,
+    );
 
-    for (const detail of booking_details) {
-      const { unit_id, jam_main } = detail;
+    let releaseImmediately = true;
 
-      const existingBookingDetail = await this.prismaService.bookingDetail.findFirst({
-        where: {
-          unit_id,
-          jam_main,
-          tanggal: bookingDate,
-          booking: {
-            status_pembayaran: {
-              in: ['Berhasil', 'Pending'],
-            },
-            status_booking: {
-              in: [StatusBooking.Aktif, StatusBooking.TidakAktif], 
-            },
-          },
-        },
-      });
+    try {
+      const bookingDate = new Date(tanggal_main);
+      bookingDate.setHours(0, 0, 0, 0);
 
-      if (existingBookingDetail) {
-        throw new BadRequestException(
-          `Unit with ID ${unit_id} is already booked or waiting for payment for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`
-        );
-      }
-      // 1. Check if already booked
-      const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
-        where: {
-          unit_id,
-          jam_main,
-          tanggal: bookingDate,
-          booking: {
-            status_booking: StatusBooking.Aktif
-          }
-        }
-      });
+      for (const detail of booking_details) {
+        const { unit_id, jam_main } = detail;
 
-      if (existingActiveBookingDetail) {
-        throw new BadRequestException(
-          `Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`
-        );
-      }
-
-      // 2. Check for blocked availability
-      const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
-        where: {
-          unit_id,
-          status_perbaikan: StatusPerbaikan.Pending,
-          tanggal_mulai_blokir: {
-            lte: bookingDate,
-          },
-          OR: [
-            { tanggal_selesai_blokir: null },
-            {
-              tanggal_selesai_blokir: {
-                gte: bookingDate,
+        const existingBookingDetail = await this.prismaService.bookingDetail.findFirst({
+          where: {
+            unit_id,
+            jam_main,
+            tanggal: bookingDate,
+            booking: {
+              status_pembayaran: {
+                in: ['Berhasil', 'Pending'],
+              },
+              status_booking: {
+                in: [StatusBooking.Aktif, StatusBooking.TidakAktif],
               },
             },
-          ],
-        },
-      });
+          },
+        });
 
-      if (blockedUnitKetersediaan) {
-        const blockStartDate = new Date(blockedUnitKetersediaan.tanggal_mulai_blokir);
-        const blockEndDate = blockedUnitKetersediaan.tanggal_selesai_blokir
-          ? new Date(blockedUnitKetersediaan.tanggal_selesai_blokir)
-          : null;
-
-        const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
-        const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
-
-        blockStartDate.setHours(0, 0, 0, 0);
-        if (blockEndDate) blockEndDate.setHours(0, 0, 0, 0);
-
-        let isBlockedByTime = false;
-        const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
-
-        //  Case 1: Same day as block start
-        if (isSameDay) {
-          isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
-        }
-
-        // Case 2: No end date and booking is after block start
-        else if (!blockEndDate && bookingDate > blockStartDate) {
-          isBlockedByTime = true; // Block full day
-        }
-
-        // Case 3: Has end date
-        else if (blockEndDate) {
-          if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
-            isBlockedByTime = true; // Middle of range
-          } else if (bookingDate.getTime() === blockEndDate.getTime()) {
-            isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime);
-          }
-        }
-
-        if (isBlockedByTime) {
+        if (existingBookingDetail) {
           throw new BadRequestException(
-            `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir.toISOString().split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir || ''} to ${blockedUnitKetersediaan.tanggal_selesai_blokir?.toISOString().split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`
+            `Unit with ID ${unit_id} is already booked or waiting for payment for ${jam_main} on ${bookingDate
+              .toISOString()
+              .split('T')[0]}. Please choose another time or unit.`
           );
         }
-      }
-    }
+        // 1. Check if already booked
+        const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
+          where: {
+            unit_id,
+            jam_main,
+            tanggal: bookingDate,
+            booking: {
+              status_booking: StatusBooking.Aktif,
+            },
+          },
+        });
 
-    // 3. Proceed with booking creation
-    try {
+        if (existingActiveBookingDetail) {
+          throw new BadRequestException(
+            `Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate
+              .toISOString()
+              .split('T')[0]}. Please choose another time or unit.`
+          );
+        }
+
+        // 2. Check for blocked availability
+        const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
+          where: {
+            unit_id,
+            status_perbaikan: StatusPerbaikan.Pending,
+            tanggal_mulai_blokir: {
+              lte: bookingDate,
+            },
+            OR: [
+              { tanggal_selesai_blokir: null },
+              {
+                tanggal_selesai_blokir: {
+                  gte: bookingDate,
+                },
+              },
+            ],
+          },
+        });
+
+        if (blockedUnitKetersediaan) {
+          const blockStartDate = new Date(blockedUnitKetersediaan.tanggal_mulai_blokir);
+          const blockEndDate = blockedUnitKetersediaan.tanggal_selesai_blokir
+            ? new Date(blockedUnitKetersediaan.tanggal_selesai_blokir)
+            : null;
+
+          const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
+          const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
+
+          blockStartDate.setHours(0, 0, 0, 0);
+          if (blockEndDate) blockEndDate.setHours(0, 0, 0, 0);
+
+          let isBlockedByTime = false;
+          const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
+
+          //  Case 1: Same day as block start
+          if (isSameDay) {
+            isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
+          }
+
+          // Case 2: No end date and booking is after block start
+          else if (!blockEndDate && bookingDate > blockStartDate) {
+            isBlockedByTime = true; // Block full day
+          }
+
+          // Case 3: Has end date
+          else if (blockEndDate) {
+            if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
+              isBlockedByTime = true; // Middle of range
+            } else if (bookingDate.getTime() === blockEndDate.getTime()) {
+              isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime);
+            }
+          }
+
+          if (isBlockedByTime) {
+            throw new BadRequestException(
+              `Unit with ID ${unit_id} is currently unavailable due to pending maintenance from ${blockedUnitKetersediaan.tanggal_mulai_blokir
+                .toISOString()
+                .split('T')[0]} ${blockedUnitKetersediaan.jam_mulai_blokir || ''} to ${blockedUnitKetersediaan
+                .tanggal_selesai_blokir?.toISOString()
+                .split('T')[0] || 'onwards'} ${blockedUnitKetersediaan.jam_selesai_blokir || ''}.`
+            );
+          }
+        }
+      }
+
       const bookingCode = await this.generateBookingCode();
       const booking = await this.prismaService.booking.create({
         data: {
@@ -180,6 +234,8 @@ export class BookingService {
           metode_pembayaran: metode_pembayaran,
           booking_code: bookingCode,
           booking_type: BookingType.Online,
+          status_pembayaran: StatusPembayaran.Pending,
+          status_booking: StatusBooking.TidakAktif,
           booking_details: {
             create: createBookingDto.booking_details,
           },
@@ -205,9 +261,14 @@ export class BookingService {
         throw new BadRequestException('Gagal membuat transaksi Midtrans. Silakan coba lagi.');
       }
 
-      return { token: snap.token, redirect_url: snap.redirect_url };
+      await this.redis.rememberSlotLocks(booking.id, lockKeys, ttlSec);
+      releaseImmediately = false;
 
+      return { token: snap.token, redirect_url: snap.redirect_url };
     } catch (error) {
+      if (releaseImmediately) {
+        await this.releaseLocks(lockKeys);
+      }
       console.error('Error creating booking:', error);
       if (error instanceof BadRequestException) {
         throw error;
@@ -476,9 +537,13 @@ export class BookingService {
       updateData.status_pembayaran = 'Gagal';
     }
 
+    const shouldReleaseSlotLocks =
+      updateData.status_booking === 'Dibatalkan' ||
+      updateData.status_pembayaran === 'Gagal';
+
     // If booking_details is provided, handle it separately
     if (booking_details) {
-      return await this.prismaService.$transaction(async (tx) => {
+      const updatedBooking = await this.prismaService.$transaction(async (tx) => {
         // First, delete existing booking details
         await tx.bookingDetail.deleteMany({
           where: { booking_id: id }
@@ -503,9 +568,13 @@ export class BookingService {
           },
         });
       });
+      if (shouldReleaseSlotLocks) {
+        await this.redis.releaseSlotLocksForBooking(id);
+      }
+      return updatedBooking;
     } else {
       // If no booking_details to update, just update the main booking data
-      return this.prismaService.booking.update({
+      const updatedBooking = await this.prismaService.booking.update({
         where: { id },
         data: updateData,
         include: {
@@ -517,6 +586,10 @@ export class BookingService {
           },
         },
       });
+      if (shouldReleaseSlotLocks) {
+        await this.redis.releaseSlotLocksForBooking(id);
+      }
+      return updatedBooking;
     }
   }
 
@@ -529,9 +602,11 @@ export class BookingService {
     if (!existingBooking) {
       throw new NotFoundException('Booking not found');
     }
-    return this.prismaService.booking.delete({
+    const deleted = await this.prismaService.booking.delete({
       where: { id },
     });
+    await this.redis.releaseSlotLocksForBooking(id);
+    return deleted;
   }
 
   async exportBookings(
@@ -566,58 +641,45 @@ export class BookingService {
 
      // --- Data Transformation to match UI columns (using your schema) ---
     const exportData = bookings.map((b) => ({
-      // 1. ID Booking
       'ID Booking': b.booking_code,
 
-      // 2. Nama (Directly from Booking model)
       Nama: b.nama,
 
-      // 3. Nomor HP (Directly from Booking model)
       'Nomor HP': String(b.nomor_hp),
 
-      // 4. Email (Directly from Booking model)
       Email: b.email,
 
-      // 5. Cabang
       Cabang: b.cabang?.nama_cabang || '',
 
-      // 6. Tanggal Main (Format as 'DD-MM-YYYY' as seen in UI)
       'Tanggal Main': b.tanggal_main ? new Date(b.tanggal_main).toLocaleDateString('id-ID', {
           day: '2-digit',
           month: '2-digit',
           year: 'numeric',
       }) : '',
 
-      // 7. Tanggal Transaksi (Directly from Booking model)
       'Tanggal Transaksi': b.tanggal_transaksi ? new Date(b.tanggal_transaksi).toLocaleDateString('id-ID', {
           day: '2-digit',
           month: '2-digit',
           year: 'numeric',
       }) : '',
 
-      // 8. Metode Pembayaran
-      'Metode Pembayaran': b.metode_pembayaran || '', // Use empty string if nullable
+      'Metode Pembayaran': b.metode_pembayaran || '', 
 
-      // 9. Total Harga (Formatted as IDR currency)
       'Total Harga': `Rp ${b.total_harga ? b.total_harga.toLocaleString('id-ID') : '0'}`,
 
-      // 10. Status Pembayaran
-      'Status Pembayaran': b.status_pembayaran, // Enum value will be converted to string
+      'Status Pembayaran': b.status_pembayaran,
 
-      // 11. Status Booking
-      'Status Booking': b.status_booking, // Enum value will be converted to string
+      'Status Booking': b.status_booking,
 
-      // 12. Tipe Booking
-      'Tipe Booking': b.booking_type, // Enum value will be converted to string
-      // Omit 'Aksi'
+      'Tipe Booking': b.booking_type,
     }));
 
     if (format === 'csv') {
       const parser = new Parser();
       let csv = parser.parse(exportData);
-      csv = 'sep=,\n' + csv; // Add the Excel-specific SEP header
+      csv = 'sep=,\n' + csv;
       return Buffer.from(csv);
-    } else { // XLSX format
+    } else { 
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Bookings');
 
@@ -648,6 +710,18 @@ export class BookingService {
   async expireStalePending() {
     const cutoff = new Date(Date.now() - 10 * 60 * 1000); // 10 minutes ago
 
+    const staleBookings = await this.prismaService.booking.findMany({
+      where: {
+        status_pembayaran: 'Pending',
+        tanggal_transaksi: { lt: cutoff },
+      },
+      select: { id: true },
+    });
+
+    if (!staleBookings.length) {
+      return { success: true, expired: 0 };
+    }
+
     const result = await this.prismaService.booking.updateMany({
       where: {
         status_pembayaran: 'Pending',
@@ -658,6 +732,10 @@ export class BookingService {
         status_booking: 'Dibatalkan',
       },
     });
+
+    await Promise.all(
+      staleBookings.map((booking) => this.redis.releaseSlotLocksForBooking(booking.id)),
+    );
 
     return { success: true, expired: result.count };
   }

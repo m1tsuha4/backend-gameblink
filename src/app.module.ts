@@ -15,6 +15,7 @@ import { KetersediaanModule } from './ketersediaan/ketersediaan.module';
 import { BookingModule } from './booking/booking.module';
 import { MidtransModule } from './midtrans/midtrans.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     BookingModule,
     MidtransModule,
     DashboardModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService, WinstonLoggerService],

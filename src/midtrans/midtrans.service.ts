@@ -1,14 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import * as midtransClient from 'midtrans-client';
+import { RedisService } from 'src/redis/redis.service';
 
 @Injectable()
 export class MidtransService {
   private snap;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {
     this.snap = new midtransClient.Snap({
-      isProduction: true,
+      isProduction: process.env.MIDTRANS_IS_PRODUCTION,
       serverKey: process.env.MIDTRANS_SERVER_KEY,
       clientKey: process.env.MIDTRANS_CLIENT_KEY,
     });
@@ -111,6 +115,10 @@ async createTransaction(booking: any, paymentType?: string) { // Jadikan payment
         metode_pembayaran: paymentType,
       },
     });
+
+    if (status_pembayaran !== 'Pending') {
+      await this.redis.releaseSlotLocksForBooking(bookingId);
+    }
 
     return { success: true };
   }
