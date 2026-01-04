@@ -714,6 +714,8 @@ export class BookingService {
       where: {
         status_pembayaran: 'Pending',
         tanggal_transaksi: { lt: cutoff },
+        status_booking: 'TidakAktif',
+        metode_pembayaran: 'bank_transfer',
       },
       select: { id: true },
     });
