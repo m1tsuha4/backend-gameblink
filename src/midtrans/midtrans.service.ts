@@ -12,7 +12,7 @@ export class MidtransService {
     private readonly redis: RedisService,
   ) {
     this.snap = new midtransClient.Snap({
-      isProduction: process.env.MIDTRANS_IS_PRODUCTION,
+      isProduction: process.env.MIDTRANS_IS_PRODUCTION === 'true',
       serverKey: process.env.MIDTRANS_SERVER_KEY,
       clientKey: process.env.MIDTRANS_CLIENT_KEY,
     });
@@ -23,9 +23,19 @@ async createTransaction(booking: any, paymentType?: string) { // Jadikan payment
     let fee = 0;
     
     // Salin item details asli agar tidak termutasi
+    const bookingTanggal = booking.tanggal_main
+      ? new Date(booking.tanggal_main).toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+      : '';
+
+    const cabangNama = booking.cabang?.nama_cabang || '';
+
     const itemDetails = booking.booking_details.map((detail, index) => ({
       id: `unit-${index + 1}`,
-      name: `Sewa ${detail.unit_id} @ ${detail.jam_main}`,
+      name: `Sewa ${detail.unit?.nama_unit || detail.unit_id} (${detail.unit?.jenis_konsol}) ${cabangNama ? `- ${cabangNama}` : ''} @ ${bookingTanggal || ''} ${detail.jam_main}`.trim(),
       quantity: 1,
       price: detail.harga,
     }));

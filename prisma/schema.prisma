@@ -1,4 +1,3 @@
-
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -6,8 +5,8 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-1.0.x"]
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-1.0.x", "debian-openssl-3.0.x", "windows"]
 }
 
 datasource db {
@@ -55,32 +54,32 @@ model Cabang {
   Unit          Unit[]
   Ketersediaan  Ketersediaan[]
   Booking       Booking[]
-  createdAt     DateTime         @default(now())
+  createdAt     DateTime       @default(now())
 }
 
 model Unit {
-  id                String         @id @default(uuid())
-  cabang            Cabang?        @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
-  cabang_id         String?
-  nama_unit         String
-  jenis_konsol      String
-  harga             Int
-  Ketersediaan      Ketersediaan[]
-  booking_details   BookingDetail[]
+  id              String          @id @default(uuid())
+  cabang          Cabang?         @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
+  cabang_id       String?
+  nama_unit       String
+  jenis_konsol    String
+  harga           Int
+  Ketersediaan    Ketersediaan[]
+  booking_details BookingDetail[]
 }
 
 model Ketersediaan {
-  id_ketersediaan        String   @id @default(uuid())
-  cabang                 Cabang?  @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
+  id_ketersediaan        String          @id @default(uuid())
+  cabang                 Cabang?         @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
   cabang_id              String?
-  unit                   Unit?    @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  unit                   Unit?           @relation(fields: [unit_id], references: [id], onDelete: Cascade)
   unit_id                String?
   tanggal_mulai_blokir   DateTime
   jam_mulai_blokir       String
   tanggal_selesai_blokir DateTime?
   jam_selesai_blokir     String?
   keterangan             String
-  status_perbaikan       StatusPerbaikan  @default(Pending)      
+  status_perbaikan       StatusPerbaikan @default(Pending)
 }
 
 enum StatusPerbaikan {
@@ -89,21 +88,21 @@ enum StatusPerbaikan {
 }
 
 model Booking {
-  id                    String @id @default(uuid())
-  booking_code          String @unique
-  nama                  String
-  nomor_hp              String
-  email                 String
-  cabang                Cabang?  @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
-  cabang_id             String?
-  tanggal_main          DateTime
-  tanggal_transaksi     DateTime
-  metode_pembayaran     String?
-  total_harga           Int
-  status_pembayaran     StatusPembayaran @default(Pending)
-  status_booking        StatusBooking @default(TidakAktif)
-  booking_details       BookingDetail[]
-  booking_type          BookingType @default(Walkin)
+  id                String           @id @default(uuid())
+  booking_code      String           @unique
+  nama              String
+  nomor_hp          String
+  email             String
+  cabang            Cabang?          @relation(fields: [cabang_id], references: [id], onDelete: Cascade)
+  cabang_id         String?
+  tanggal_main      DateTime
+  tanggal_transaksi DateTime
+  metode_pembayaran String?
+  total_harga       Int
+  status_pembayaran StatusPembayaran @default(Pending)
+  status_booking    StatusBooking    @default(TidakAktif)
+  booking_details   BookingDetail[]
+  booking_type      BookingType      @default(Walkin)
 }
 
 enum BookingType {
@@ -112,14 +111,14 @@ enum BookingType {
 }
 
 model BookingDetail {
-  id          String  @id @default(uuid())
-  booking_id  String
-  unit_id     String
-  jam_main    String
-  harga       Int
-  tanggal     DateTime
-  booking     Booking @relation(fields: [booking_id], references: [id], onDelete: Cascade)
-  unit        Unit    @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  booking_id String
+  unit_id    String
+  jam_main   String
+  harga      Int
+  tanggal    DateTime
+  booking    Booking  @relation(fields: [booking_id], references: [id], onDelete: Cascade)
+  unit       Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
 }
 
 enum StatusPembayaran {
