@@ -33,18 +33,27 @@ async createTransaction(booking: any, paymentType?: string) { // Jadikan payment
 
     const cabangNama = booking.cabang?.nama_cabang || '';
 
-    const itemDetails = booking.booking_details.map((detail, index) => ({
-      id: `unit-${index + 1}`,
-      name: `Sewa ${detail.unit?.nama_unit || detail.unit_id} (${detail.unit?.jenis_konsol}) ${cabangNama ? `- ${cabangNama}` : ''} @ ${bookingTanggal || ''} ${detail.jam_main}`.trim(),
-      quantity: 1,
-      price: detail.harga,
-    }));
+    const itemDetails = booking.booking_details.map((detail, index) => {
+      let itemName = `Sewa ${detail.unit?.nama_unit || detail.unit_id} ${cabangNama ? `- ${cabangNama}` : ''} @ ${bookingTanggal || ''} ${detail.jam_main}`.trim();
+      
+      if (itemName.length > 50) {
+        itemName = itemName.substring(0, 47) + '...';
+      }
+
+      return {
+        id: `unit-${index + 1}`,
+        name: itemName,
+        quantity: 1,
+        price: detail.harga,
+      };
+    });
 
     // Siapkan payload dasar
     const payload: any = { // Gunakan 'any' untuk fleksibilitas properti
       transaction_details: {
-        order_id: `${booking.id} (${booking.booking_code})`,
+        order_id: booking.id, // ID UUID yang aman URL dan sesuai format (tanpa spasi/kurung)
       },
+      custom_field1: booking.booking_code, // Simpan booking code di sini
       customer_details: {
         first_name: booking.nama,
         email: booking.email,
@@ -92,7 +101,14 @@ async createTransaction(booking: any, paymentType?: string) { // Jadikan payment
       payload.transaction_details.gross_amount = baseAmount; 
     }
 
-    return await this.snap.createTransaction(payload);
+    console.log('Sending Midtrans Payload:', JSON.stringify(payload, null, 2));
+
+    try {
+      return await this.snap.createTransaction(payload);
+    } catch (error) {
+      console.error('Midtrans Create Transaction Failed:', error?.response || error);
+      throw error;
+    }
   }
 
 

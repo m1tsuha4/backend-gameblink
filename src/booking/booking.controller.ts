@@ -43,7 +43,8 @@ export class BookingController {
 
   @Get()
   findAll(
-     @Query('tanggal_main') tanggal_main: string,
+     @Query('startDate') startDate: string,
+     @Query('endDate') endDate: string,
      @Query('cabang') cabang: string,
      @Query('type') type: string,
      @Query('metode_pembayaran') metode_pembayaran: string,
@@ -52,7 +53,8 @@ export class BookingController {
      @Query('search') search: string // <-- Add search param
   ) {
     return this.bookingService.findAll(
-      tanggal_main,
+      startDate,
+      endDate,
       cabang,
       type,
       metode_pembayaran,
@@ -64,7 +66,8 @@ export class BookingController {
 
    @Get('export')
    async exportBookings(
-    @Query('tanggal_main') tanggal_main: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
     @Query('cabang') cabang: string,
     @Query('type') type: string,
     @Query('metode_pembayaran') metode_pembayaran: string,
@@ -72,7 +75,8 @@ export class BookingController {
     @Res() res: Response,
   ) {
     const fileBuffer = await this.bookingService.exportBookings(
-      tanggal_main,
+      startDate,
+      endDate,
       cabang,
       type,
       metode_pembayaran,

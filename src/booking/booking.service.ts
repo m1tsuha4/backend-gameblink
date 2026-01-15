@@ -40,15 +40,19 @@ export class BookingService {
   }
 
   private buildWhere(
-    tanggal_main?: string,
+    startDate?: string,
+    endDate?: string,
     cabang?: string,
     type?: string,
     metode_pembayaran?: string
   ) {
     const where: any = {};
 
-    if (tanggal_main) {
-      where.tanggal_main = this.buildDateRange(tanggal_main);
+    if (startDate && endDate) {
+      where.tanggal_main = {
+        gte: new Date(startDate),
+        lte: new Date(endDate),
+      };
     }
 
     if (type) {
@@ -257,6 +261,7 @@ export class BookingService {
           throw new Error('Invalid Snap response');
         }
       } catch (e) {
+        console.error('Midtrans Transaction Error:', e);
         await this.prismaService.booking.delete({ where: { id: booking.id } });
         throw new BadRequestException('Gagal membuat transaksi Midtrans. Silakan coba lagi.');
       }
@@ -397,7 +402,8 @@ export class BookingService {
 
 
   async findAll(
-    tanggal_main?: string,
+    startDate?: string,
+    endDate?: string,
     cabang?: string,
     type?: string,
     metode_pembayaran?: string,
@@ -407,8 +413,11 @@ export class BookingService {
   ) {
     const where: any = {};
 
-    if (tanggal_main) {
-      where.tanggal_main = this.buildDateRange(tanggal_main);
+    if (startDate && endDate) {
+      where.tanggal_main = {
+        gte: new Date(startDate),
+        lte: new Date(endDate),
+      };
     }
 
     if (type) {
@@ -610,13 +619,14 @@ export class BookingService {
   }
 
   async exportBookings(
-    tanggal_main?: string,
+    startDate?: string,
+    endDate?: string,
     cabang?: string,
     type?: string,
     metode_pembayaran?: string,
     format: 'csv' | 'xlsx' = 'csv'
   ): Promise<Buffer> {
-    const where = this.buildWhere(tanggal_main, cabang, type, metode_pembayaran);
+    const where = this.buildWhere(startDate, endDate, cabang, type, metode_pembayaran);
 
     console.log('Export filters (where):', where);
 
