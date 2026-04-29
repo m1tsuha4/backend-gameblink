@@ -105,11 +105,21 @@ export class BookingService {
 
   async create(createBookingDto: CreateBookingDto) {
     const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
-    const isoDate = new Date(tanggal_main).toISOString().slice(0, 10);
+    
+    // Normalize date handling to prevent timezone mismatch between Redis and DB
+    const bookingDate = new Date(tanggal_main);
+    bookingDate.setHours(0, 0, 0, 0);
+
+    // Use local date parts for Redis key to ensure consistency with DB bookingDate
+    const year = bookingDate.getFullYear();
+    const month = String(bookingDate.getMonth() + 1).padStart(2, '0');
+    const day = String(bookingDate.getDate()).padStart(2, '0');
+    const localIsoDate = `${year}-${month}-${day}`;
+
     const ttlSec = this.SLOT_LOCK_TTL_SECONDS;
 
     const lockKeys = await this.acquireSlotLocks(
-      isoDate,
+      localIsoDate,
       booking_details.map((b) => ({ unit_id: b.unit_id, jam_main: b.jam_main })),
       ttlSec,
     );
@@ -117,8 +127,6 @@ export class BookingService {
     let releaseImmediately = true;
 
     try {
-      const bookingDate = new Date(tanggal_main);
-      bookingDate.setHours(0, 0, 0, 0);
 
       for (const detail of booking_details) {
         const { unit_id, jam_main } = detail;
@@ -146,25 +154,7 @@ export class BookingService {
               .split('T')[0]}. Please choose another time or unit.`
           );
         }
-        // 1. Check if already booked
-        const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
-          where: {
-            unit_id,
-            jam_main,
-            tanggal: bookingDate,
-            booking: {
-              status_booking: StatusBooking.Aktif,
-            },
-          },
-        });
 
-        if (existingActiveBookingDetail) {
-          throw new BadRequestException(
-            `Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate
-              .toISOString()
-              .split('T')[0]}. Please choose another time or unit.`
-          );
-        }
 
         // 2. Check for blocked availability
         const blockedUnitKetersediaan = await this.prismaService.ketersediaan.findFirst({
@@ -291,20 +281,25 @@ export class BookingService {
     for (const detail of booking_details) {
       const { unit_id, jam_main } = detail;
 
-      // Check if already booked
+      // Check if already booked (including Pending Online bookings)
       const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
         where: {
           unit_id: unit_id,
           jam_main: jam_main,
           tanggal: bookingDate,
           booking: {
-            status_booking: StatusBooking.Aktif,
+            status_pembayaran: {
+              in: ['Berhasil', 'Pending'],
+            },
+            status_booking: {
+              in: [StatusBooking.Aktif, StatusBooking.TidakAktif],
+            },
           },
         },
       });
 
       if (existingActiveBookingDetail) {
-        throw new BadRequestException(`Unit with ID ${unit_id} is already booked for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
+        throw new BadRequestException(`Unit with ID ${unit_id} is already booked or waiting for payment for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
       }
 
       // Check if blocked
@@ -630,57 +625,59 @@ export class BookingService {
 
     console.log('Export filters (where):', where);
 
-    
-    const bookings  = await this.prismaService.booking.findMany({
-      where,
-      include: {
-        cabang: true,
-        booking_details: {
-          include: {
-            unit: true
+    // Process in chunks to avoid memory overflow
+    const CHUNK_SIZE = 1000;
+    let skip = 0;
+    const allBookings: any[] = [];
+
+    while (true) {
+      const bookings = await this.prismaService.booking.findMany({
+        where,
+        include: {
+          cabang: true,
+          booking_details: {
+            include: {
+              unit: true
+            }
           }
-        }
-      },
-      orderBy: {
-        booking_code: 'desc',
-      },
-    });
-    console.log('Found bookings:', bookings.length);
+        },
+        orderBy: {
+          booking_code: 'desc',
+        },
+        take: CHUNK_SIZE,
+        skip: skip,
+      });
 
-     if (bookings.length === 0) throw new NotFoundException('Booking not found');
+      if (bookings.length === 0) break;
+      allBookings.push(...bookings);
+      skip += CHUNK_SIZE;
+    }
 
-     // --- Data Transformation to match UI columns (using your schema) ---
-    const exportData = bookings.map((b) => ({
+    console.log('Found bookings:', allBookings.length);
+
+    if (allBookings.length === 0) throw new NotFoundException('Booking not found');
+
+    // --- Data Transformation ---
+    const exportData = allBookings.map((b) => ({
       'ID Booking': b.booking_code,
-
       Nama: b.nama,
-
       'Nomor HP': String(b.nomor_hp),
-
       Email: b.email,
-
       Cabang: b.cabang?.nama_cabang || '',
-
       'Tanggal Main': b.tanggal_main ? new Date(b.tanggal_main).toLocaleDateString('id-ID', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
       }) : '',
-
       'Tanggal Transaksi': b.tanggal_transaksi ? new Date(b.tanggal_transaksi).toLocaleDateString('id-ID', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
       }) : '',
-
-      'Metode Pembayaran': b.metode_pembayaran || '', 
-
+      'Metode Pembayaran': b.metode_pembayaran || '',
       'Total Harga': `Rp ${b.total_harga ? b.total_harga.toLocaleString('id-ID') : '0'}`,
-
       'Status Pembayaran': b.status_pembayaran,
-
       'Status Booking': b.status_booking,
-
       'Tipe Booking': b.booking_type,
     }));
 
@@ -689,11 +686,10 @@ export class BookingService {
       let csv = parser.parse(exportData);
       csv = 'sep=,\n' + csv;
       return Buffer.from(csv);
-    } else { 
+    } else {
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Bookings');
 
-      // Define columns explicitly to match the UI order and headers
       worksheet.columns = [
         { header: 'ID Booking', key: 'ID Booking', width: 15 },
         { header: 'Nama', key: 'Nama', width: 20 },
@@ -709,9 +705,7 @@ export class BookingService {
         { header: 'Tipe Booking', key: 'Tipe Booking', width: 15 },
       ];
 
-      // Add rows using the transformed exportData
       worksheet.addRows(exportData);
-
       const arrayBuffer = await workbook.xlsx.writeBuffer();
       return Buffer.from(arrayBuffer);
     }
