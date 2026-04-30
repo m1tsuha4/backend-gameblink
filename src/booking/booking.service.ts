@@ -49,9 +49,13 @@ export class BookingService {
     const where: any = {};
 
     if (startDate && endDate) {
+      const end = new Date(endDate);
+      if (!endDate.includes('T')) {
+        end.setUTCHours(23, 59, 59, 999);
+      }
       where.tanggal_main = {
         gte: new Date(startDate),
-        lte: new Date(endDate),
+        lte: end,
       };
     }
 
@@ -106,16 +110,19 @@ export class BookingService {
   async create(createBookingDto: CreateBookingDto) {
     const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
     
-    // Normalize date handling to prevent timezone mismatch between Redis and DB
-    const bookingDate = new Date(tanggal_main);
-    bookingDate.setHours(0, 0, 0, 0);
+    // Normalize date part for Redis locks and queries
+    const dateString = typeof tanggal_main === 'string' ? tanggal_main : new Date(tanggal_main).toISOString();
+    const datePart = dateString.split('T')[0];
 
-    // Use local date parts for Redis key to ensure consistency with DB bookingDate
-    const year = bookingDate.getFullYear();
-    const month = String(bookingDate.getMonth() + 1).padStart(2, '0');
-    const day = String(bookingDate.getDate()).padStart(2, '0');
-    const localIsoDate = `${year}-${month}-${day}`;
+    // Create the exact DateTime by combining the Play Date with the exact current time (button click)
+    const nowIso = new Date().toISOString();
+    const timePart = nowIso.split('T')[1];
+    const exactTanggalMain = new Date(`${datePart}T${timePart}`);
+    
+    const startOfDay = new Date(`${datePart}T00:00:00.000Z`);
+    const endOfDay = new Date(`${datePart}T23:59:59.999Z`);
 
+    const localIsoDate = datePart;
     const ttlSec = this.SLOT_LOCK_TTL_SECONDS;
 
     const lockKeys = await this.acquireSlotLocks(
@@ -135,7 +142,10 @@ export class BookingService {
           where: {
             unit_id,
             jam_main,
-            tanggal: bookingDate,
+            tanggal: {
+              gte: startOfDay,
+              lte: endOfDay,
+            },
             booking: {
               status_pembayaran: {
                 in: ['Berhasil', 'Pending'],
@@ -149,9 +159,7 @@ export class BookingService {
 
         if (existingBookingDetail) {
           throw new BadRequestException(
-            `Unit with ID ${unit_id} is already booked or waiting for payment for ${jam_main} on ${bookingDate
-              .toISOString()
-              .split('T')[0]}. Please choose another time or unit.`
+            `Unit with ID ${unit_id} is already booked or waiting for payment for ${jam_main} on ${datePart}. Please choose another time or unit.`
           );
         }
 
@@ -162,13 +170,13 @@ export class BookingService {
             unit_id,
             status_perbaikan: StatusPerbaikan.Pending,
             tanggal_mulai_blokir: {
-              lte: bookingDate,
+              lte: endOfDay,
             },
             OR: [
               { tanggal_selesai_blokir: null },
               {
                 tanggal_selesai_blokir: {
-                  gte: bookingDate,
+                  gte: startOfDay,
                 },
               },
             ],
@@ -181,14 +189,14 @@ export class BookingService {
             ? new Date(blockedUnitKetersediaan.tanggal_selesai_blokir)
             : null;
 
+          const blockStartMidnight = new Date(`${blockStartDate.toISOString().split('T')[0]}T00:00:00.000Z`);
+          const blockEndMidnight = blockEndDate ? new Date(`${blockEndDate.toISOString().split('T')[0]}T00:00:00.000Z`) : null;
+
           const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
           const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
 
-          blockStartDate.setHours(0, 0, 0, 0);
-          if (blockEndDate) blockEndDate.setHours(0, 0, 0, 0);
-
           let isBlockedByTime = false;
-          const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
+          const isSameDay = blockStartMidnight.getTime() === startOfDay.getTime();
 
           //  Case 1: Same day as block start
           if (isSameDay) {
@@ -196,15 +204,15 @@ export class BookingService {
           }
 
           // Case 2: No end date and booking is after block start
-          else if (!blockEndDate && bookingDate > blockStartDate) {
+          else if (!blockEndDate && startOfDay > blockStartMidnight) {
             isBlockedByTime = true; // Block full day
           }
 
           // Case 3: Has end date
-          else if (blockEndDate) {
-            if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
+          else if (blockEndMidnight) {
+            if (startOfDay > blockStartMidnight && startOfDay < blockEndMidnight) {
               isBlockedByTime = true; // Middle of range
-            } else if (bookingDate.getTime() === blockEndDate.getTime()) {
+            } else if (startOfDay.getTime() === blockEndMidnight.getTime()) {
               isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime);
             }
           }
@@ -227,11 +235,16 @@ export class BookingService {
           ...createBookingDto,
           metode_pembayaran: metode_pembayaran,
           booking_code: bookingCode,
+          tanggal_main: exactTanggalMain,
+          tanggal_transaksi: nowIso,
           booking_type: BookingType.Online,
           status_pembayaran: StatusPembayaran.Pending,
           status_booking: StatusBooking.TidakAktif,
           booking_details: {
-            create: createBookingDto.booking_details,
+            create: createBookingDto.booking_details.map(detail => ({
+              ...detail,
+              tanggal: exactTanggalMain
+            })),
           },
         },
         include: {
@@ -275,18 +288,39 @@ export class BookingService {
   async createWalkinBooking(createBookingDto: CreateBookingDto) {
     const { booking_details, tanggal_main, metode_pembayaran } = createBookingDto;
 
-    const bookingDate = new Date(tanggal_main);
-    bookingDate.setHours(0, 0, 0, 0);
+    const dateString = typeof tanggal_main === 'string' ? tanggal_main : new Date(tanggal_main).toISOString();
+    const datePart = dateString.split('T')[0];
 
-    for (const detail of booking_details) {
-      const { unit_id, jam_main } = detail;
+    // Combine Play Date with exact current transaction time
+    const nowIso = new Date().toISOString();
+    const timePart = nowIso.split('T')[1];
+    const exactTanggalMain = new Date(`${datePart}T${timePart}`);
+    
+    const startOfDay = new Date(`${datePart}T00:00:00.000Z`);
+    const endOfDay = new Date(`${datePart}T23:59:59.999Z`);
 
-      // Check if already booked (including Pending Online bookings)
-      const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
+    const ttlSec = this.SLOT_LOCK_TTL_SECONDS || 600;
+    const lockKeys = await this.acquireSlotLocks(
+      datePart,
+      booking_details.map((b) => ({ unit_id: b.unit_id, jam_main: b.jam_main })),
+      ttlSec,
+    );
+
+    let releaseImmediately = true;
+
+    try {
+      for (const detail of booking_details) {
+        const { unit_id, jam_main } = detail;
+
+        // Check if already booked (including Pending Online bookings)
+        const existingActiveBookingDetail = await this.prismaService.bookingDetail.findFirst({
         where: {
           unit_id: unit_id,
           jam_main: jam_main,
-          tanggal: bookingDate,
+          tanggal: {
+            gte: startOfDay,
+            lte: endOfDay,
+          },
           booking: {
             status_pembayaran: {
               in: ['Berhasil', 'Pending'],
@@ -299,7 +333,7 @@ export class BookingService {
       });
 
       if (existingActiveBookingDetail) {
-        throw new BadRequestException(`Unit with ID ${unit_id} is already booked or waiting for payment for ${jam_main} on ${bookingDate.toISOString().split('T')[0]}. Please choose another time or unit.`);
+        throw new BadRequestException(`Unit with ID ${unit_id} is already booked or waiting for payment for ${jam_main} on ${datePart}. Please choose another time or unit.`);
       }
 
       // Check if blocked
@@ -308,11 +342,11 @@ export class BookingService {
           unit_id: unit_id,
           status_perbaikan: StatusPerbaikan.Pending,
           tanggal_mulai_blokir: {
-            lte: bookingDate,
+            lte: endOfDay,
           },
           OR: [
             { tanggal_selesai_blokir: null },
-            { tanggal_selesai_blokir: { gte: bookingDate } },
+            { tanggal_selesai_blokir: { gte: startOfDay } },
           ],
         },
       });
@@ -323,28 +357,28 @@ export class BookingService {
           ? new Date(blockedUnitKetersediaan.tanggal_selesai_blokir)
           : null;
 
+        const blockStartMidnight = new Date(`${blockStartDate.toISOString().split('T')[0]}T00:00:00.000Z`);
+        const blockEndMidnight = blockEndDate ? new Date(`${blockEndDate.toISOString().split('T')[0]}T00:00:00.000Z`) : null;
+
         const blockStartTime = blockedUnitKetersediaan.jam_mulai_blokir || '00:00';
         const blockEndTime = blockedUnitKetersediaan.jam_selesai_blokir || '23:59';
 
-        blockStartDate.setHours(0, 0, 0, 0);
-        if (blockEndDate) blockEndDate.setHours(0, 0, 0, 0);
-
         let isBlockedByTime = false;
-        const isSameDay = blockStartDate.getTime() === bookingDate.getTime();
+        const isSameDay = blockStartMidnight.getTime() === startOfDay.getTime();
 
         // Case 1: Booking on same day as block start
         if (isSameDay) {
           isBlockedByTime = this.isTimeBetween(jam_main, blockStartTime, '23:59');
         }
         // Case 2: Indefinite block and booking after block start
-        else if (!blockEndDate && bookingDate > blockStartDate) {
+        else if (!blockEndDate && startOfDay > blockStartMidnight) {
           isBlockedByTime = true;
         }
         //  Case 3: Has end date
-        else if (blockEndDate) {
-          if (bookingDate > blockStartDate && bookingDate < blockEndDate) {
+        else if (blockEndMidnight) {
+          if (startOfDay > blockStartMidnight && startOfDay < blockEndMidnight) {
             isBlockedByTime = true;
-          } else if (bookingDate.getTime() === blockEndDate.getTime()) {
+          } else if (startOfDay.getTime() === blockEndMidnight.getTime()) {
             isBlockedByTime = this.isTimeBetween(jam_main, '00:00', blockEndTime);
           }
         }
@@ -355,10 +389,9 @@ export class BookingService {
           );
         }
       }
-    }
+    } // closes for loop
 
     // Proceed with creating the booking
-    try {
       const bookingCode = await this.generateBookingCode();
 
       const booking = await this.prismaService.booking.create({
@@ -366,13 +399,16 @@ export class BookingService {
           ...createBookingDto,
           booking_code: bookingCode,
           metode_pembayaran,
-          tanggal_main: tanggal_main,
-        status_pembayaran: StatusPembayaran.Berhasil,
+          tanggal_main: exactTanggalMain,
+          status_pembayaran: StatusPembayaran.Berhasil,
           status_booking: StatusBooking.Aktif,
           booking_type: BookingType.Walkin,
-          tanggal_transaksi: new Date().toISOString(),
-        booking_details: {
-            create: createBookingDto.booking_details,
+          tanggal_transaksi: nowIso,
+          booking_details: {
+            create: createBookingDto.booking_details.map(detail => ({
+              ...detail,
+              tanggal: exactTanggalMain
+            })),
           },
         },
         include: {
@@ -392,6 +428,10 @@ export class BookingService {
         throw error;
       }
       throw new BadRequestException('Failed to create walk-in booking due to an internal error. Please try again.');
+    } finally {
+      if (releaseImmediately) {
+        await this.releaseLocks(lockKeys);
+      }
     }
   }
 
@@ -409,9 +449,13 @@ export class BookingService {
     const where: any = {};
 
     if (startDate && endDate) {
+      const end = new Date(endDate);
+      if (!endDate.includes('T')) {
+        end.setUTCHours(23, 59, 59, 999);
+      }
       where.tanggal_main = {
         gte: new Date(startDate),
-        lte: new Date(endDate),
+        lte: end,
       };
     }
 
