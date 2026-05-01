@@ -133,14 +133,34 @@ async createTransaction(booking: any, paymentType?: string) { // Jadikan payment
       status_booking = 'Dibatalkan';
     }
 
-    await this.prisma.booking.updateMany({
-      where: { id: bookingId },
-      data: {
-        status_booking,
-        status_pembayaran,
-        metode_pembayaran: paymentType,
-      },
-    });
+    const updateData = {
+      status_booking,
+      status_pembayaran,
+      metode_pembayaran: paymentType,
+    };
+
+    if (status_pembayaran === 'Pending') {
+      await this.prisma.booking.updateMany({
+        where: {
+          id: bookingId,
+          status_pembayaran: 'Pending',
+        },
+        data: updateData,
+      });
+    } else if (status_pembayaran === 'Gagal') {
+      await this.prisma.booking.updateMany({
+        where: {
+          id: bookingId,
+          status_pembayaran: { not: 'Berhasil' },
+        },
+        data: updateData,
+      });
+    } else {
+      await this.prisma.booking.updateMany({
+        where: { id: bookingId },
+        data: updateData,
+      });
+    }
 
     if (status_pembayaran !== 'Pending') {
       await this.redis.releaseSlotLocksForBooking(bookingId);
