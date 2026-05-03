@@ -25,6 +25,7 @@ async createTransaction(booking: any, paymentType?: string) { // Jadikan payment
     // Salin item details asli agar tidak termutasi
     const bookingTanggal = booking.tanggal_main
       ? new Date(booking.tanggal_main).toLocaleDateString('id-ID', {
+          timeZone: 'UTC',
           day: '2-digit',
           month: '2-digit',
           year: 'numeric',
@@ -33,7 +34,11 @@ async createTransaction(booking: any, paymentType?: string) { // Jadikan payment
 
     const cabangNama = booking.cabang?.nama_cabang || '';
 
-    const itemDetails = booking.booking_details.map((detail, index) => {
+    const sortedDetails = [...booking.booking_details].sort((a, b) => 
+      a.jam_main.localeCompare(b.jam_main)
+    );
+
+    const itemDetails = sortedDetails.map((detail, index) => {
       let itemName = `Sewa ${detail.unit?.nama_unit || detail.unit_id} ${cabangNama ? `- ${cabangNama}` : ''} @ ${bookingTanggal || ''} ${detail.jam_main}`.trim();
       
       if (itemName.length > 50) {
