@@ -20,23 +20,63 @@ export class BookingService {
   private isTimeBetween(time: string, start: string, end: string): boolean {
     return start <= time && time <= end;
   }
-  private async generateBookingCode(): Promise<string> {
-    const lastBooking = await this.prismaService.booking.findFirst({
-      orderBy: { booking_code: 'desc' },
-      where: {
-        booking_code: {
-          startsWith: 'BK'
-        }
-      }
-    });
+  private async generateBookingCode(bookingDatePart?: string): Promise<string> {
+    // New format: BK{YYYYMMDD}-{SEQ} (seq is zero-padded 6 digits)
+    let ymd: string;
+    if (bookingDatePart) {
+      ymd = bookingDatePart.replace(/-/g, '');
+    } else {
+      const now = new Date();
+      const yyyy = now.getUTCFullYear().toString();
+      const mm = (now.getUTCMonth() + 1).toString().padStart(2, '0');
+      const dd = now.getUTCDate().toString().padStart(2, '0');
+      ymd = `${yyyy}${mm}${dd}`;
+    }
+    const counterKey = `booking:counter:${ymd}`;
 
-    let nextNumber = 1;
-    if (lastBooking && lastBooking.booking_code) {
-      const lastNumber = parseInt(lastBooking.booking_code.substring(2));
-      nextNumber = lastNumber + 1;
+    try {
+      const client: any = (this.redis.client as any);
+      if (client) {
+        const exists = await client.exists(counterKey);
+        if (!exists) {
+          // initialize per-day counter from DB (if any bookings for that day exist)
+          const lastBookingForDay = await this.prismaService.booking.findFirst({
+            where: { booking_code: { startsWith: `BK${ymd}-` } },
+            orderBy: { booking_code: 'desc' },
+          });
+          let start = 0;
+          if (lastBookingForDay && lastBookingForDay.booking_code) {
+            const parts = lastBookingForDay.booking_code.split('-');
+            const seq = parseInt(parts[1]) || 0;
+            start = seq;
+          }
+          await client.set(counterKey, start.toString());
+        }
+
+        const nextSeq = await client.incr(counterKey);
+        return `BK${ymd}-${nextSeq.toString().padStart(6, '0')}`;
+      }
+    } catch (err) {
+      // on any Redis error, fall back to DB-only strategy
     }
 
-    return `BK${nextNumber.toString().padStart(5, '0')}`;
+    // Fallback: use DB to determine next sequence for today
+    const lastBookingForDay = await this.prismaService.booking.findFirst({
+      where: { booking_code: { startsWith: `BK${ymd}-` } },
+      orderBy: { booking_code: 'desc' },
+    });
+
+    let nextSeq = 1;
+    if (lastBookingForDay && lastBookingForDay.booking_code) {
+      const parts = lastBookingForDay.booking_code.split('-');
+      const seq = parseInt(parts[1]);
+      if (!isNaN(seq)) nextSeq = seq + 1;
+    } else {
+      // No booking with new format for today — safe to start at 1
+      nextSeq = 1;
+    }
+
+    return `BK${ymd}-${nextSeq.toString().padStart(6, '0')}`;
   }
 
   private buildWhere(
@@ -229,7 +269,7 @@ export class BookingService {
         }
       }
 
-      const bookingCode = await this.generateBookingCode();
+      const bookingCode = await this.generateBookingCode(datePart);
       const booking = await this.prismaService.booking.create({
         data: {
           ...createBookingDto,
@@ -392,7 +432,7 @@ export class BookingService {
     } // closes for loop
 
     // Proceed with creating the booking
-      const bookingCode = await this.generateBookingCode();
+      const bookingCode = await this.generateBookingCode(datePart);
 
       const booking = await this.prismaService.booking.create({
         data: {
@@ -763,7 +803,6 @@ export class BookingService {
         status_pembayaran: 'Pending',
         tanggal_transaksi: { lt: cutoff },
         status_booking: 'TidakAktif',
-        metode_pembayaran: 'bank_transfer',
       },
       select: { id: true },
     });
@@ -776,6 +815,7 @@ export class BookingService {
       where: {
         status_pembayaran: 'Pending',
         tanggal_transaksi: { lt: cutoff },
+        status_booking: 'TidakAktif',
       },
       data: {
         status_pembayaran: 'Gagal',
