@@ -8,21 +8,30 @@ export class RedisService implements OnModuleDestroy {
   private readonly socketPath = process.env.REDIS_SOCKET_PATH || '/var/run/redis/redis.sock';
   private readonly bookingLocksPrefix = 'booking-locks';
 
-  constructor() {
+constructor() {
+  const redisUrl = process.env.REDIS_URL;
+
+  if (redisUrl) {
+    this.client = new Redis(redisUrl, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 2,
+    });
+  } else {
     if (!fs.existsSync(this.socketPath)) {
       console.error('Redis socket tidak ditemukan di', this.socketPath);
     }
 
     this.client = new Redis({
-      path: this.socketPath, 
+      path: this.socketPath,
       lazyConnect: true,
       maxRetriesPerRequest: 2,
     });
-
-    this.client.connect().catch((err) => {
-      console.error('Gagal konek ke Redis:', err.message);
-    });
   }
+
+  this.client.connect().catch((err) => {
+    console.error('Gagal konek ke Redis:', err.message);
+  });
+}
 
   async onModuleDestroy() {
     try { await this.client.quit(); } catch {}
